@@ -1,21 +1,13 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { getTeamColor } from "../../constants/f1Colors";
 
-/**
- * ChampionshipChart
- * Round-by-round cumulative points flow for a single, pre-filtered season.
- * Pass the already-filtered array for one season (from `getChampionshipStandings(season)`).
- *
- * Expected input prop `data`:
- * [{ round, driver, team, cumulative_points }]
- */
-export default function ChampionshipChart({ data, highlightDrivers = null }) {
-  const [hiddenDrivers, setHiddenDrivers] = useState(new Set());
+const SLOT_COUNT = 7;
 
-  const { pivoted, drivers, driverConstructor } = useMemo(() => {
+export default function ChampionshipChart({ data }) {
+  const { pivoted, rankedDrivers, driverConstructor } = useMemo(() => {
     const driverConstructor = new Map();
     const driverSet = new Set();
     for (const row of data) {
@@ -24,7 +16,18 @@ export default function ChampionshipChart({ data, highlightDrivers = null }) {
         driverConstructor.set(row.driver, row.team || row.constructor);
       }
     }
-    const drivers = Array.from(driverSet);
+
+    // Rank drivers by final cumulative points (descending)
+    const maxRound = Math.max(...data.map((r) => r.round));
+    const finalPoints = new Map();
+    for (const row of data) {
+      if (row.round === maxRound) {
+        finalPoints.set(row.driver, row.cumulative_points || 0);
+      }
+    }
+    const rankedDrivers = Array.from(driverSet).sort(
+      (a, b) => (finalPoints.get(b) || 0) - (finalPoints.get(a) || 0)
+    );
 
     const byRound = new Map();
     for (const row of data) {
@@ -33,16 +36,50 @@ export default function ChampionshipChart({ data, highlightDrivers = null }) {
     }
     const pivoted = Array.from(byRound.values()).sort((a, b) => a.round - b.round);
 
-    return { pivoted, drivers, driverConstructor };
+    return { pivoted, rankedDrivers, driverConstructor };
   }, [data]);
 
-  function toggleDriver(driver) {
-    setHiddenDrivers((prev) => {
-      const next = new Set(prev);
-      next.has(driver) ? next.delete(driver) : next.add(driver);
+  // Slots: top 7 by default
+  const [slots, setSlots] = useState([]);
+  const [pickerOpen, setPickerOpen] = useState(null); // index of slot being swapped
+  const pickerRef = useRef(null);
+
+  // Reset slots when data changes
+  useEffect(() => {
+    setSlots(rankedDrivers.slice(0, SLOT_COUNT));
+    setPickerOpen(null);
+  }, [rankedDrivers]);
+
+  // Close picker on outside click / escape
+  useEffect(() => {
+    if (pickerOpen === null) return;
+    function onClickOutside(e) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) setPickerOpen(null);
+    }
+    function onEscape(e) {
+      if (e.key === "Escape") setPickerOpen(null);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [pickerOpen]);
+
+  const swapDriver = useCallback((slotIndex, newDriver) => {
+    setSlots((prev) => {
+      const next = [...prev];
+      const oldDriver = next[slotIndex];
+      const existingIndex = next.indexOf(newDriver);
+      if (existingIndex !== -1 && existingIndex !== slotIndex) {
+        next[existingIndex] = oldDriver;
+      }
+      next[slotIndex] = newDriver;
       return next;
     });
-  }
+    setPickerOpen(null);
+  }, []);
 
   function formatLabel(driver) {
     return driver
@@ -72,8 +109,7 @@ export default function ChampionshipChart({ data, highlightDrivers = null }) {
             label={{ value: "Cumulative Points", angle: -90, position: "insideLeft", fill: "#71717a" }}
           />
           <Tooltip content={<ChampionshipTooltip formatLabel={formatLabel} />} />
-          {drivers.map((driver) => {
-            const dimmed = highlightDrivers && !highlightDrivers.includes(driver);
+          {slots.map((driver) => {
             const color = getTeamColor(driverConstructor.get(driver));
             return (
               <Line
@@ -82,11 +118,9 @@ export default function ChampionshipChart({ data, highlightDrivers = null }) {
                 dataKey={driver}
                 name={driver}
                 stroke={color}
-                strokeWidth={dimmed ? 1 : 2.5}
-                strokeOpacity={dimmed ? 0.2 : 1}
+                strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 4 }}
-                hide={hiddenDrivers.has(driver)}
                 connectNulls={false}
                 isAnimationActive={false}
               />
@@ -95,29 +129,72 @@ export default function ChampionshipChart({ data, highlightDrivers = null }) {
         </LineChart>
       </ResponsiveContainer>
 
-      {/* Clickable legend */}
-      <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-zinc-800">
-        {drivers.map((driver) => {
-          const isHidden = hiddenDrivers.has(driver);
-          const color = getTeamColor(driverConstructor.get(driver));
-          return (
-            <button
-              key={driver}
-              onClick={() => toggleDriver(driver)}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] border transition-opacity cursor-pointer ${
-                isHidden
-                  ? "opacity-30 border-zinc-800 text-gray-500"
-                  : "opacity-100 border-zinc-700 text-gray-200"
-              }`}
-            >
-              <span
-                className="w-2 h-2 rounded-full inline-block"
-                style={{ backgroundColor: color }}
-              />
-              {formatLabel(driver)}
-            </button>
-          );
-        })}
+      {/* Driver slot chips — click to swap */}
+      <div className="relative">
+        <p className="text-[11px] text-gray-500 mt-3 mb-2">
+          Showing {slots.length} of {rankedDrivers.length} drivers. Click a name to swap.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {slots.map((driver, i) => {
+            const color = getTeamColor(driverConstructor.get(driver));
+            return (
+              <button
+                key={driver}
+                onClick={() => setPickerOpen(pickerOpen === i ? null : i)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] border transition-all cursor-pointer ${
+                  pickerOpen === i
+                    ? "border-[#e10600] text-white bg-[#e10600]/10"
+                    : "border-zinc-700 text-gray-200 hover:border-gray-500"
+                }`}
+              >
+                <span
+                  className="w-2 h-2 rounded-full inline-block"
+                  style={{ backgroundColor: color }}
+                />
+                {formatLabel(driver)}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Dropdown picker */}
+        {pickerOpen !== null && (
+          <div
+            ref={pickerRef}
+            className="absolute z-30 w-56 max-h-72 overflow-auto rounded-lg border border-white/15 bg-[#0d0d0d]/95 backdrop-blur-sm shadow-2xl shadow-black/60 py-1 bottom-full mb-2"
+          >
+            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-gray-500 border-b border-white/10">
+              Swap {formatLabel(slots[pickerOpen])} for...
+            </div>
+            {rankedDrivers.map((driver) => {
+              const onChart = slots.includes(driver);
+              const isSelf = driver === slots[pickerOpen];
+              const color = getTeamColor(driverConstructor.get(driver));
+              return (
+                <button
+                  key={driver}
+                  type="button"
+                  disabled={isSelf}
+                  onClick={() => swapDriver(pickerOpen, driver)}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-white/10 disabled:cursor-default disabled:hover:bg-transparent ${
+                    isSelf ? "text-gray-500" : "text-gray-200"
+                  }`}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="truncate">{formatLabel(driver)}</span>
+                  {isSelf ? (
+                    <span className="ml-auto text-[9px] text-gray-600 tracking-wide">CURRENT</span>
+                  ) : onChart ? (
+                    <span className="ml-auto text-[9px] font-semibold text-[#e10600] tracking-wide">SWAP</span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

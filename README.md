@@ -29,12 +29,12 @@ Open http://localhost:5173 in your browser. That's it — data is fetched from H
 Full-screen interactive D3 world map showing race circuit locations as red pins.
 
 - **Year selector** (fixed floating bar at top): Shows 7 years at a time from 2000-2024, arrows to scroll. Clicking a year loads that season's race pins on the map.
-- **"Over the Years" button**: In the top bar. Opens a large modal with `EraBumpChart` — historical end-of-season championship rank (2000-2024). Toggle between drivers/constructors view, multi-select filter with search, season range slider (7 years at a time). Chart only appears after selecting entities. Data fetched via `getEraStandings()`.
+- **"Over the Years" button**: In the top bar. Opens a large modal with `EraBumpChart` — historical end-of-season championship rank (2000-2024). Toggle between drivers/constructors view, multi-select filter with search. Scroll to zoom into a season range, drag to pan, double-click to reset to full view. Chart only appears after selecting entities. Data fetched via `getEraStandings()`.
 - **Zoom & Pan**: Pinch-to-zoom (trackpad/touch) + scroll wheel zoom. Double-click to re-center on a point.
 - **Country hover effect**: Countries highlight with a warm crimson tint + red border on hover, matching the F1 theme.
 - **Race pins**: Hovering shows circuit outline image + race name tooltip. Clicking navigates to Page 2.
 - **Splash screen**: Animated intro on first visit (once per session).
-- **Championship Progress panel** (fixed, bottom-right): Shows a collapsed title card by default. On hover, expands to reveal the full `ChampionshipChart` with cumulative points per driver across rounds. Data fetched via `getChampionshipStandings(season)`.
+- **Championship Progress panel** (fixed, bottom-right): Shows a collapsed title card by default. On hover, expands to reveal the full `ChampionshipChart` showing top 7 drivers by final points with cumulative points across rounds. Click any driver chip to swap via dropdown picker (same pattern as Tire Strategy). Data fetched via `getChampionshipStandings(season)`.
 - **Data source**: `src/constants/raceLocations.json` (static, 38 circuits with lat/lng coordinates).
 
 ### Page 2 — `/race/:season/:raceId` — Race Detail
@@ -88,10 +88,11 @@ Three regions:
 │       │   ├── SlotDriverPicker.jsx # Shared driver swap dropdown for charts
 │       │   │
 │       │   ├── charts/              # VISUALIZATION COMPONENTS
-│       │   │   ├── ChampionshipChart.jsx  # Recharts cumulative points line chart (clickable legend)
+│       │   │   ├── ChampionshipChart.jsx  # Recharts cumulative points line chart (top 7 drivers,
+│       │   │   │                          #   slot-based driver swap picker)
 │       │   │   ├── EraBumpChart.jsx       # Recharts bump chart: end-of-season rank 2000-2024
 │       │   │   │                          #   Driver/constructor toggle, multi-select filter,
-│       │   │   │                          #   season range slider (7 years at a time)
+│       │   │   │                          #   scroll-to-zoom, drag-to-pan, double-click reset
 │       │   │   ├── PositionChart.jsx      # D3 animated position bump chart (5 drivers,
 │       │   │   │                          #   play/pause, compound bands, pit markers)
 │       │   │   │                          #   Self-contained: fetches via getPositionChartData()

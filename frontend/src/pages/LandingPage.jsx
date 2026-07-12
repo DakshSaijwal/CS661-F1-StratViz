@@ -123,7 +123,7 @@ export default function LandingPage() {
       </div>
 
       {/* Championship Progress panel (bottom-right) */}
-      <div className="group absolute bottom-8 right-6 z-10 w-[280px] h-[160px] bg-[#121822]/90 backdrop-blur-sm border border-[#26303f] rounded-xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:w-[620px] hover:h-[500px] hover:border-[#e10600]/50 hover:shadow-lg hover:shadow-[#e10600]/10">
+      <div className="group absolute bottom-8 right-6 z-10 w-[280px] h-[160px] bg-[#121822]/90 backdrop-blur-sm border border-[#26303f] rounded-xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:w-[620px] hover:h-[560px] hover:border-[#e10600]/50 hover:shadow-lg hover:shadow-[#e10600]/10">
         {/* Collapsed state — title card */}
         <div className="flex flex-col items-center justify-center h-full gap-3 group-hover:hidden transition-opacity">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e10600" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

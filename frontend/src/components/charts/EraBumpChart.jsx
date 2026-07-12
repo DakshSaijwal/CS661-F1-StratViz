@@ -1,10 +1,8 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { getTeamColor } from "../../constants/f1Colors";
-
-const WINDOW = 7; // show 7 seasons at a time in the scrollbar
 
 export default function EraBumpChart({ data, constructorData = null }) {
   const [viewMode, setViewMode] = useState("drivers");
@@ -12,20 +10,118 @@ export default function EraBumpChart({ data, constructorData = null }) {
   const [search, setSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const chartWrapRef = useRef(null);
 
   const seasons = useMemo(() => {
     return Array.from(new Set(data.map((d) => d.season))).sort((a, b) => a - b);
   }, [data]);
 
-  // Season window for horizontal scroll
-  const [windowStart, setWindowStart] = useState(Math.max(0, seasons.length - WINDOW));
+  const minSeason = seasons[0] || 2000;
+  const maxSeason = seasons[seasons.length - 1] || 2024;
+  const totalSpan = maxSeason - minSeason;
 
-  // Update windowStart when seasons change
+  // Zoom/pan state: viewStart and viewEnd define the visible season range
+  const [viewStart, setViewStart] = useState(minSeason);
+  const [viewEnd, setViewEnd] = useState(maxSeason);
+
+  // Drag state
+  const dragRef = useRef(null);
+
+  // Reset view when seasons change
   useEffect(() => {
-    setWindowStart(Math.max(0, seasons.length - WINDOW));
-  }, [seasons]);
+    setViewStart(minSeason);
+    setViewEnd(maxSeason);
+  }, [minSeason, maxSeason]);
 
-  const visibleSeasons = seasons.slice(windowStart, windowStart + WINDOW);
+  // Zoom via scroll wheel
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const zoomFactor = 0.1;
+    const currentSpan = viewEnd - viewStart;
+    const minSpan = 3; // minimum 3 seasons visible
+
+    // Get mouse position relative to chart for zoom-toward-cursor
+    const rect = chartWrapRef.current?.getBoundingClientRect();
+    const mouseRatio = rect ? (e.clientX - rect.left) / rect.width : 0.5;
+
+    let delta = e.deltaY > 0 ? zoomFactor : -zoomFactor; // scroll down = zoom out
+    let newSpan = currentSpan * (1 + delta);
+    newSpan = Math.max(minSpan, Math.min(totalSpan, newSpan));
+
+    const spanChange = newSpan - currentSpan;
+    let newStart = viewStart - spanChange * mouseRatio;
+    let newEnd = newStart + newSpan;
+
+    // Clamp
+    if (newStart < minSeason) { newStart = minSeason; newEnd = newStart + newSpan; }
+    if (newEnd > maxSeason) { newEnd = maxSeason; newStart = newEnd - newSpan; }
+    newStart = Math.max(minSeason, newStart);
+    newEnd = Math.min(maxSeason, newEnd);
+
+    setViewStart(newStart);
+    setViewEnd(newEnd);
+  }, [viewStart, viewEnd, minSeason, maxSeason, totalSpan]);
+
+  // Attach wheel listener (non-passive to allow preventDefault)
+  useEffect(() => {
+    const el = chartWrapRef.current;
+    if (!el) return;
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [handleWheel]);
+
+  // Drag to pan
+  const handleMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    const rect = chartWrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragRef.current = {
+      startX: e.clientX,
+      viewStart,
+      viewEnd,
+      width: rect.width,
+    };
+    e.preventDefault();
+  }, [viewStart, viewEnd]);
+
+  useEffect(() => {
+    function onMove(e) {
+      if (!dragRef.current) return;
+      const { startX, viewStart: vs, viewEnd: ve, width } = dragRef.current;
+      const dx = e.clientX - startX;
+      const span = ve - vs;
+      const seasonsPerPx = span / width;
+      let shift = -dx * seasonsPerPx;
+
+      let newStart = vs + shift;
+      let newEnd = ve + shift;
+      if (newStart < minSeason) { newStart = minSeason; newEnd = minSeason + span; }
+      if (newEnd > maxSeason) { newEnd = maxSeason; newStart = maxSeason - span; }
+
+      setViewStart(newStart);
+      setViewEnd(newEnd);
+    }
+    function onUp() {
+      dragRef.current = null;
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [minSeason, maxSeason]);
+
+  // Double-click to reset zoom
+  const handleDoubleClick = useCallback(() => {
+    setViewStart(minSeason);
+    setViewEnd(maxSeason);
+  }, [minSeason, maxSeason]);
+
+  // Compute visible seasons for data filtering
+  const visibleSeasons = useMemo(() => {
+    return seasons.filter((s) => s >= Math.floor(viewStart) && s <= Math.ceil(viewEnd));
+  }, [seasons, viewStart, viewEnd]);
 
   const driverLatestTeam = useMemo(() => {
     const map = new Map();
@@ -69,7 +165,6 @@ export default function EraBumpChart({ data, constructorData = null }) {
     [activeRows, entityField]
   );
 
-  // Filter data to only visible seasons
   const pivoted = useMemo(() => {
     const visibleSet = new Set(visibleSeasons);
     const bySeason = new Map();
@@ -131,6 +226,7 @@ export default function EraBumpChart({ data, constructorData = null }) {
   );
 
   const hasSelection = selected.size > 0;
+  const isZoomed = (viewEnd - viewStart) < totalSpan - 0.5;
 
   return (
     <div className="bg-[#111111] border border-zinc-800 rounded-lg p-4 w-full text-white">
@@ -223,75 +319,73 @@ export default function EraBumpChart({ data, constructorData = null }) {
         </div>
       </div>
 
-      {/* Chart — only render lines when entities are selected */}
-      {hasSelection ? (
-        <ResponsiveContainer width="100%" height={440}>
-          <LineChart data={pivoted} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-800" />
-            <XAxis
-              dataKey="season"
-              type="number"
-              domain={[visibleSeasons[0], visibleSeasons[visibleSeasons.length - 1]]}
-              ticks={visibleSeasons}
-              stroke="#71717a"
-              tick={{ fill: "#a1a1aa", fontSize: 11 }}
-              label={{ value: "Season", position: "insideBottom", offset: -3, fill: "#71717a" }}
-            />
-            <YAxis
-              reversed
-              type="number"
-              domain={[1, maxPosition]}
-              allowDecimals={false}
-              stroke="#71717a"
-              tick={{ fill: "#a1a1aa", fontSize: 11 }}
-              label={{ value: "Championship Position", angle: -90, position: "insideLeft", fill: "#71717a" }}
-            />
-            <Tooltip content={<BumpTooltip formatLabel={formatLabel} />} />
-            {entities.map((entity) => {
-              if (!selected.has(entity)) return null;
-              const color = entityColor(entity);
-              return (
-                <Line
-                  key={entity}
-                  type="linear"
-                  dataKey={entity}
-                  name={entity}
-                  stroke={color}
-                  strokeWidth={2.5}
-                  strokeOpacity={1}
-                  dot={{ r: 3, fill: color, strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                  connectNulls={false}
-                  isAnimationActive={false}
-                />
-              );
-            })}
-          </LineChart>
-        </ResponsiveContainer>
-      ) : (
-        <div className="flex items-center justify-center h-[440px] border border-dashed border-zinc-800 rounded-lg">
-          <span className="text-gray-500 text-sm">Select entities above to display the chart</span>
-        </div>
-      )}
-
-      {/* Season range slider */}
-      <div className="mt-3 pt-3 border-t border-zinc-800">
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 w-10 text-right">{seasons[0]}</span>
-          <input
-            type="range"
-            min={0}
-            max={seasons.length - WINDOW}
-            value={windowStart}
-            onChange={(e) => setWindowStart(Number(e.target.value))}
-            className="flex-1 accent-[#e10600] cursor-pointer h-2"
-          />
-          <span className="text-xs text-gray-500 w-10">{seasons[seasons.length - 1]}</span>
-        </div>
-        <p className="text-[10px] text-gray-500 text-center mt-1">
-          Showing {visibleSeasons[0]}–{visibleSeasons[visibleSeasons.length - 1]} · Drag to change range
-        </p>
+      {/* Chart — zoom via scroll, pan via drag, double-click to reset */}
+      <div
+        ref={chartWrapRef}
+        onMouseDown={handleMouseDown}
+        onDoubleClick={handleDoubleClick}
+        style={{ cursor: dragRef.current ? "grabbing" : "grab", userSelect: "none" }}
+      >
+        {hasSelection ? (
+          <ResponsiveContainer width="100%" height={440}>
+            <LineChart data={pivoted} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-800" />
+              <XAxis
+                dataKey="season"
+                type="number"
+                domain={[Math.floor(viewStart), Math.ceil(viewEnd)]}
+                ticks={visibleSeasons}
+                stroke="#71717a"
+                tick={{ fill: "#a1a1aa", fontSize: 11 }}
+                label={{ value: "Season", position: "insideBottom", offset: -3, fill: "#71717a" }}
+              />
+              <YAxis
+                reversed
+                type="number"
+                domain={[1, maxPosition]}
+                allowDecimals={false}
+                stroke="#71717a"
+                tick={{ fill: "#a1a1aa", fontSize: 11 }}
+                label={{ value: "Championship Position", angle: -90, position: "insideLeft", fill: "#71717a" }}
+              />
+              <Tooltip content={<BumpTooltip formatLabel={formatLabel} />} />
+              {entities.map((entity) => {
+                if (!selected.has(entity)) return null;
+                const color = entityColor(entity);
+                return (
+                  <Line
+                    key={entity}
+                    type="linear"
+                    dataKey={entity}
+                    name={entity}
+                    stroke={color}
+                    strokeWidth={2.5}
+                    strokeOpacity={1}
+                    dot={{ r: 3, fill: color, strokeWidth: 0 }}
+                    activeDot={{ r: 5 }}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                  />
+                );
+              })}
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-[440px] border border-dashed border-zinc-800 rounded-lg">
+            <span className="text-gray-500 text-sm">Select entities above to display the chart</span>
+          </div>
+        )}
       </div>
+
+      {/* Zoom hint */}
+      <p className="text-[10px] text-gray-500 text-center mt-2">
+        Scroll to zoom · Drag to pan · Double-click to reset
+        {isZoomed && (
+          <span className="ml-2 text-[#e10600]">
+            · Viewing {Math.floor(viewStart)}–{Math.ceil(viewEnd)}
+          </span>
+        )}
+      </p>
     </div>
   );
 }
