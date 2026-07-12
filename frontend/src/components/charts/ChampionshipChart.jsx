@@ -1,28 +1,16 @@
 import React, { useMemo, useState } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { getTeamColor } from "../../constants/f1Colors";
 
 /**
  * ChampionshipChart
- * Cumulative points trajectory for every driver across a season's rounds.
+ * Round-by-round cumulative points flow for a single, pre-filtered season.
+ * Pass the already-filtered array for one season (from `getChampionshipStandings(season)`).
  *
- * Expected input prop `data` — rows from `standings.csv` (DuckDB-WASM query
- * result), one row per driver per round:
- * @param {Object} props
- * @param {Array<{
- *   season: number,
- *   round: number,
- *   driver: string,            // e.g. "max_verstappen"
- *   constructor: string,       // e.g. "Red Bull" — used directly for line colour
- *   points: number,            // points scored that round
- *   cumulative_points: number, // running total, already computed upstream
- *   position: number           // championship position after this round
- * }>} props.data
- * @param {string[]} [props.highlightDrivers] - if provided, only these drivers render at
- *   full opacity; everyone else is dimmed (used to compare specific championship battles).
+ * Expected input prop `data`:
+ * [{ round, driver, team, cumulative_points }]
  */
 export default function ChampionshipChart({ data, highlightDrivers = null }) {
   const [hiddenDrivers, setHiddenDrivers] = useState(new Set());
@@ -33,7 +21,7 @@ export default function ChampionshipChart({ data, highlightDrivers = null }) {
     for (const row of data) {
       driverSet.add(row.driver);
       if (!driverConstructor.has(row.driver)) {
-        driverConstructor.set(row.driver, row.constructor);
+        driverConstructor.set(row.driver, row.team || row.constructor);
       }
     }
     const drivers = Array.from(driverSet);
@@ -56,42 +44,34 @@ export default function ChampionshipChart({ data, highlightDrivers = null }) {
     });
   }
 
-  function formatDriverLabel(driver) {
+  function formatLabel(driver) {
     return driver
       .split("_")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
       .join(" ");
   }
 
   return (
-    <div className="bg-[#111111] rounded-lg p-4 w-full h-[420px] text-white">
-      <h3 className="text-sm font-semibold text-gray-300 mb-2 tracking-wide uppercase">
+    <div className="bg-[#111111] border border-zinc-800 rounded-lg p-4 w-full text-white">
+      <h3 className="text-sm font-semibold text-gray-300 mb-3 tracking-wide uppercase">
         Championship Progression
       </h3>
-      <ResponsiveContainer width="100%" height="90%">
-        <LineChart data={pivoted} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+
+      <ResponsiveContainer width="100%" height={400}>
+        <LineChart data={pivoted} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-800" />
           <XAxis
             dataKey="round"
-            stroke="#888"
-            tick={{ fill: "#aaa", fontSize: 12 }}
-            label={{ value: "Round", position: "insideBottom", offset: -3, fill: "#888" }}
+            stroke="#71717a"
+            tick={{ fill: "#a1a1aa", fontSize: 11 }}
+            label={{ value: "Round", position: "insideBottom", offset: -3, fill: "#71717a" }}
           />
           <YAxis
-            stroke="#888"
-            tick={{ fill: "#aaa", fontSize: 12 }}
-            label={{ value: "Cumulative Points", angle: -90, position: "insideLeft", fill: "#888" }}
+            stroke="#71717a"
+            tick={{ fill: "#a1a1aa", fontSize: 11 }}
+            label={{ value: "Cumulative Points", angle: -90, position: "insideLeft", fill: "#71717a" }}
           />
-          <Tooltip
-            contentStyle={{ background: "#0a0a0a", border: "1px solid #333", borderRadius: 6 }}
-            labelFormatter={(round) => `Round ${round}`}
-            formatter={(value, driver) => [value, formatDriverLabel(driver)]}
-          />
-          <Legend
-            onClick={(e) => toggleDriver(e.dataKey)}
-            formatter={(driver) => formatDriverLabel(driver)}
-            wrapperStyle={{ cursor: "pointer", fontSize: 12 }}
-          />
+          <Tooltip content={<ChampionshipTooltip formatLabel={formatLabel} />} />
           {drivers.map((driver) => {
             const dimmed = highlightDrivers && !highlightDrivers.includes(driver);
             const color = getTeamColor(driverConstructor.get(driver));
@@ -102,61 +82,69 @@ export default function ChampionshipChart({ data, highlightDrivers = null }) {
                 dataKey={driver}
                 name={driver}
                 stroke={color}
-                strokeWidth={dimmed ? 1 : 2}
-                strokeOpacity={dimmed ? 0.25 : 1}
+                strokeWidth={dimmed ? 1 : 2.5}
+                strokeOpacity={dimmed ? 0.2 : 1}
                 dot={false}
+                activeDot={{ r: 4 }}
                 hide={hiddenDrivers.has(driver)}
-                connectNulls
+                connectNulls={false}
                 isAnimationActive={false}
               />
             );
           })}
         </LineChart>
       </ResponsiveContainer>
+
+      {/* Clickable legend */}
+      <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-zinc-800">
+        {drivers.map((driver) => {
+          const isHidden = hiddenDrivers.has(driver);
+          const color = getTeamColor(driverConstructor.get(driver));
+          return (
+            <button
+              key={driver}
+              onClick={() => toggleDriver(driver)}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] border transition-opacity cursor-pointer ${
+                isHidden
+                  ? "opacity-30 border-zinc-800 text-gray-500"
+                  : "opacity-100 border-zinc-700 text-gray-200"
+              }`}
+            >
+              <span
+                className="w-2 h-2 rounded-full inline-block"
+                style={{ backgroundColor: color }}
+              />
+              {formatLabel(driver)}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// --- Mock data: 22-round season, 6 drivers, matches standings.csv schema exactly ---
-function buildMockStandings() {
-  const drivers = [
-    { driver: "max_verstappen", constructor: "Red Bull", avg: 21 },
-    { driver: "sergio_perez", constructor: "Red Bull", avg: 14 },
-    { driver: "lewis_hamilton", constructor: "Mercedes", avg: 12 },
-    { driver: "charles_leclerc", constructor: "Ferrari", avg: 13 },
-    { driver: "lando_norris", constructor: "McLaren", avg: 11 },
-    { driver: "fernando_alonso", constructor: "Aston Martin", avg: 10 },
-  ];
+function ChampionshipTooltip({ active, payload, label, formatLabel }) {
+  if (!active || !payload?.length) return null;
+  const rows = payload
+    .filter((p) => p.value != null)
+    .sort((a, b) => b.value - a.value);
+  if (rows.length === 0) return null;
 
-  const rows = [];
-  const cumulative = Object.fromEntries(drivers.map((d) => [d.driver, 0]));
-
-  for (let round = 1; round <= 22; round++) {
-    const roundResults = drivers.map((d) => {
-      const noise = Math.round((Math.random() - 0.5) * 10);
-      const points = Math.max(0, d.avg + noise);
-      cumulative[d.driver] += points;
-      return { ...d, points };
-    });
-
-    // rank this round's cumulative totals to derive championship position
-    const ranked = [...roundResults].sort(
-      (a, b) => cumulative[b.driver] - cumulative[a.driver]
-    );
-
-    for (const d of roundResults) {
-      rows.push({
-        season: 2023,
-        round,
-        driver: d.driver,
-        constructor: d.constructor,
-        points: d.points,
-        cumulative_points: cumulative[d.driver],
-        position: ranked.findIndex((r) => r.driver === d.driver) + 1,
-      });
-    }
-  }
-  return rows;
+  return (
+    <div className="bg-[#0a0a0a] border border-zinc-800 rounded-md px-3 py-2 shadow-xl max-h-64 overflow-y-auto">
+      <div className="text-xs font-semibold text-gray-300 mb-1">Round {label}</div>
+      <div className="space-y-0.5">
+        {rows.map((row) => (
+          <div key={row.dataKey} className="flex items-center gap-2 text-[11px]">
+            <span
+              className="w-2 h-2 rounded-full inline-block"
+              style={{ backgroundColor: row.stroke }}
+            />
+            <span className="text-gray-200">{formatLabel(row.dataKey)}</span>
+            <span className="text-gray-500 ml-auto tabular-nums">{row.value} pts</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
-
-export const mockData = buildMockStandings();

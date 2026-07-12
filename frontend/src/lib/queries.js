@@ -11,10 +11,28 @@ import { query } from "./duckdb.js";
  */
 export async function getChampionshipStandings(season) {
   return query(`
-    SELECT driver, round, cumulative_points
+    SELECT driver, constructor AS team, round, cumulative_points
     FROM standings
     WHERE season = ${season}
     ORDER BY round ASC, cumulative_points DESC
+  `);
+}
+
+/**
+ * End-of-season championship positions for all drivers across all seasons (2000-2024).
+ * Used by EraBumpChart for the "Over the Years" modal.
+ * Returns: [{ season, driver, team, position }, ...]
+ */
+export async function getEraStandings() {
+  return query(`
+    SELECT s.season, s.driver, s.constructor AS team, s.position
+    FROM standings s
+    INNER JOIN (
+      SELECT season, MAX(round) AS max_round
+      FROM standings
+      GROUP BY season
+    ) last ON s.season = last.season AND s.round = last.max_round
+    ORDER BY s.season, s.position
   `);
 }
 

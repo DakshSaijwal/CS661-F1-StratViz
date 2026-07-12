@@ -29,10 +29,10 @@ Open http://localhost:5173 in your browser. That's it — data is fetched from H
 Full-screen interactive D3 world map showing race circuit locations as red pins.
 
 - **Year selector** (fixed floating bar at top): Shows 7 years at a time from 2000-2024, arrows to scroll. Clicking a year loads that season's race pins on the map.
-- **"Over the Years" button**: In the top bar. Opens a full-screen modal popup with placeholder for a cross-season visualization.
+- **"Over the Years" button**: In the top bar. Opens a modal with `EraBumpChart` — historical end-of-season championship rank (2000-2024). Toggle between drivers/constructors view, multi-select filter with search. Data fetched via `getEraStandings()`.
 - **Zoom & Pan**: Pinch-to-zoom (trackpad/touch) + scroll wheel zoom. Double-click to re-center on a point.
 - **Race pins**: Hovering shows race name tooltip. Clicking navigates to Page 2.
-- **Championship Progress panel** (fixed, bottom-right): Shows selected year's championship standings placeholder. Expands on hover for better visibility.
+- **Championship Progress panel** (fixed, bottom-right): WORKING — `ChampionshipChart` showing cumulative points per driver across rounds for the selected year. Expands on hover. Data fetched via `getChampionshipStandings(season)`.
 - **Data source**: `src/constants/raceLocations.json` (static, 38 circuits with lat/lng coordinates).
 
 ### Page 2 — `/race/:season/:raceId` — Race Detail
@@ -77,7 +77,9 @@ Three regions:
 │       │   ├── SlotDriverPicker.jsx # Shared driver swap dropdown for charts
 │       │   │
 │       │   ├── charts/              # VISUALIZATION COMPONENTS
-│       │   │   ├── ChampionshipChart.jsx  # Recharts cumulative points line chart
+│       │   │   ├── ChampionshipChart.jsx  # Recharts cumulative points line chart (clickable legend)
+│       │   │   ├── EraBumpChart.jsx       # Recharts bump chart: end-of-season rank 2000-2024
+│       │   │   │                          #   Driver/constructor toggle, multi-select filter
 │       │   │   ├── PositionChart.jsx      # D3 animated position bump chart (5 drivers,
 │       │   │   │                          #   play/pause, compound bands, pit markers)
 │       │   │   │                          #   Self-contained: fetches via getPositionChartData()
@@ -160,7 +162,8 @@ const leaderboard = await getRaceLeaderboard(2023, 1);
 
 | Function | Params | Returns |
 |---|---|---|
-| `getChampionshipStandings(season)` | `2023` | `[{ driver, round, cumulative_points }]` |
+| `getChampionshipStandings(season)` | `2023` | `[{ driver, team, round, cumulative_points }]` |
+| `getEraStandings()` | none | `[{ season, driver, team, position }]` (end-of-season standings, 2000-2024) |
 | `getConstructorHeatmap(season)` | `2023` | `[{ constructor, round, points }]` |
 | `getRaceOutcomesGrid(season)` | `2023` | `[{ round, position, driver, team, dnf }]` |
 | `getSeasonStatCards(season)` | `2023` | `{ champion, race_count, constructor_champion, fastest_lap_holder }` |
@@ -199,16 +202,6 @@ const leaderboard = await getRaceLeaderboard(2023, 1);
    - Additional context: `track_status.parquet` (safety car / VSC overlays)
    - Play/pause/scrub controls, lap counter
    - This is the main feature of Page 2
-
-2. **Championship Progress visualization** (Page 1, bottom-right panel)
-   - Placeholder already wired in LandingPage.jsx
-   - Receives `selectedYear` as context
-   - Replace the placeholder `<span>` with your chart component
-
-3. **"Over the Years" visualization** (Page 1, modal popup)
-   - Placeholder modal already wired in LandingPage.jsx
-   - Triggered by "Over the Years" button in top bar
-   - Full-screen modal (80vw × 70vh) — replace placeholder with cross-season chart
 
 ### Other tasks
 - Connect Vercel for auto-deploy

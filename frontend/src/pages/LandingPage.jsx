@@ -1,6 +1,10 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import WorldMap from "../components/WorldMap";
+import ChampionshipChart from "../components/charts/ChampionshipChart";
+import EraBumpChart from "../components/charts/EraBumpChart";
+import LoadingSkeleton from "../components/layout/LoadingSkeleton";
+import { getChampionshipStandings, getEraStandings } from "../lib/queries";
 import raceData from "../constants/raceLocations.json";
 
 const ALL_YEARS = Array.from({ length: 25 }, (_, i) => 2000 + i); // 2000-2024
@@ -12,11 +16,39 @@ export default function LandingPage() {
   const [windowStart, setWindowStart] = useState(ALL_YEARS.length - WINDOW_SIZE);
   const [showOverYears, setShowOverYears] = useState(false);
 
+  // Championship Progress data (bottom-right panel)
+  const [champData, setChampData] = useState([]);
+  const [champLoading, setChampLoading] = useState(true);
+
+  // Era Bump Chart data (Over the Years modal)
+  const [eraData, setEraData] = useState([]);
+  const [eraLoading, setEraLoading] = useState(false);
+
   const visibleYears = ALL_YEARS.slice(windowStart, windowStart + WINDOW_SIZE);
 
   const races = useMemo(() => {
     return raceData.racesByYear[selectedYear] || [];
   }, [selectedYear]);
+
+  // Fetch championship standings when year changes
+  useEffect(() => {
+    setChampLoading(true);
+    getChampionshipStandings(selectedYear).then((d) => {
+      setChampData(d);
+      setChampLoading(false);
+    });
+  }, [selectedYear]);
+
+  // Fetch era data when modal opens (only once)
+  useEffect(() => {
+    if (showOverYears && eraData.length === 0) {
+      setEraLoading(true);
+      getEraStandings().then((d) => {
+        setEraData(d);
+        setEraLoading(false);
+      });
+    }
+  }, [showOverYears]);
 
   function handlePrev() {
     setWindowStart((s) => Math.max(0, s - 1));
@@ -83,16 +115,18 @@ export default function LandingPage() {
         </button>
       </div>
 
-      {/* Championship Progress panel (bottom-right) — visible when a year is selected */}
+      {/* Championship Progress panel (bottom-right) */}
       <div className="absolute bottom-8 right-6 z-10 w-[420px] h-[280px] bg-[#121822]/90 backdrop-blur-sm border border-[#26303f] rounded-xl overflow-hidden flex flex-col transition-all duration-300 ease-out hover:w-[580px] hover:h-[400px] hover:border-[#e10600]/50 hover:shadow-lg hover:shadow-[#e10600]/10">
-        <div className="px-4 py-3 border-b border-[#26303f] flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white">
-            Championship Progress — {selectedYear}
-          </h3>
-          <span className="text-xs text-gray-500">Season standings</span>
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <span className="text-gray-500 text-sm">Championship visualization — placeholder</span>
+        <div className="flex-1 overflow-hidden">
+          {champLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <LoadingSkeleton height="100%" />
+            </div>
+          ) : (
+            <div className="w-full h-full [&_.bg-\\[\\#111111\\]]:bg-transparent [&_.border-zinc-800]:border-transparent [&_h3]:hidden">
+              <ChampionshipChart data={champData} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -105,7 +139,7 @@ export default function LandingPage() {
             onClick={() => setShowOverYears(false)}
           />
           {/* Modal */}
-          <div className="relative w-[80vw] max-w-[900px] h-[70vh] max-h-[600px] bg-[#121822] border border-[#26303f] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="relative w-[90vw] max-w-[1000px] h-[80vh] max-h-[700px] bg-[#121822] border border-[#26303f] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-6 py-4 border-b border-[#26303f] flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Over the Years (2000–2024)</h2>
@@ -116,11 +150,17 @@ export default function LandingPage() {
                 ✕
               </button>
             </div>
-            {/* Content placeholder */}
-            <div className="flex-1 flex items-center justify-center p-6">
-              <div className="w-full h-full border-2 border-dashed border-[#26303f] rounded-xl flex items-center justify-center">
-                <span className="text-gray-500 text-sm">Over the Years visualization — placeholder</span>
-              </div>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {eraLoading ? (
+                <LoadingSkeleton height="450px" />
+              ) : eraData.length > 0 ? (
+                <EraBumpChart data={eraData} />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+                  Loading era data...
+                </div>
+              )}
             </div>
           </div>
         </div>
