@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getRaceTelemetry, getTrackOutline } from "../../lib/queries";
+import { getRaceTelemetry, getTrackOutline, getComparisonLapData } from "../../lib/queries";
 import { getTeamColor } from "../../constants/f1Colors";
 import {
   interpAt,
@@ -9,6 +9,7 @@ import {
   makeProjector,
 } from "./raceEngine";
 import TelemetryChart from "./TelemetryChart";
+import ComparisonPanel from "./comparison/ComparisonPanel";
 
 const TWO_PI = Math.PI * 2;
 
@@ -23,6 +24,11 @@ export default function RaceSimulator({ raceId }) {
   const [speed, setSpeed] = useState(6);
   const [focused, setFocused] = useState(null);
   const [ui, setUi] = useState({ lap: 1, nLaps: 1, standings: [], atEnd: false });
+  // Comparison panel: selected drivers (max 6), race object mirrored into
+  // state so it flows through props, and the per-lap rows from the laps table
+  const [compare, setCompare] = useState([]);
+  const [race, setRace] = useState(null);
+  const [lapsRows, setLapsRows] = useState([]);
 
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
@@ -52,8 +58,15 @@ export default function RaceSimulator({ raceId }) {
     setUnavailable(false);
     setPlaying(false);
     setFocused(null);
+    setCompare([]);
+    setRace(null);
+    setLapsRows([]);
     simTimeRef.current = 0;
     outlineRef.current = null;
+    // Laps-table rows load in parallel and never block the replay
+    getComparisonLapData(raceId).then((rows) => {
+      if (alive) setLapsRows(rows || []);
+    });
     Promise.all([getRaceTelemetry(raceId), getTrackOutline(raceId)]).then(
       ([race, outline]) => {
         if (!alive) return;
@@ -63,6 +76,7 @@ export default function RaceSimulator({ raceId }) {
           return;
         }
         raceRef.current = race;
+        setRace(race);
         outlineRef.current = outline;
         alphaRef.current = new Map(race.drivers.map((d) => [d.code, 0]));
         simTimeRef.current = 0;
@@ -244,6 +258,20 @@ export default function RaceSimulator({ raceId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, unavailable]);
 
+  // Dev-only hook: lets tests force a frame while the tab is backgrounded
+  // (requestAnimationFrame is paused for hidden tabs). No effect in production.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__sim = {
+      setTime: (t) => { simTimeRef.current = t; },
+      setFocus: (code) => setFocused(code),
+      setCompare: (codes) => setCompare(codes),
+      frame: (dt = 0.25) => { rebuild(); draw(dt); pushUi(); },
+    };
+    return () => { delete window.__sim; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Controls
   function togglePlay() {
     const race = raceRef.current;
@@ -264,6 +292,15 @@ export default function RaceSimulator({ raceId }) {
   }
   function selectDriver(code) {
     setFocused((prev) => (prev === code ? null : code));
+  }
+  function toggleCompare(code) {
+    setCompare((prev) =>
+      prev.includes(code)
+        ? prev.filter((c) => c !== code)
+        : prev.length >= 6
+          ? prev
+          : [...prev, code]
+    );
   }
 
   const focusedDriver = focused
@@ -312,6 +349,17 @@ export default function RaceSimulator({ raceId }) {
                 show all
               </button>
             </div>
+          )}
+          {race && compare.length > 0 && (
+            <ComparisonPanel
+              race={race}
+              lapsRows={lapsRows}
+              compare={compare}
+              currentLap={ui.lap}
+              nLaps={ui.nLaps}
+              onRemoveDriver={toggleCompare}
+              onClear={() => setCompare([])}
+            />
           )}
         </div>
 
@@ -395,15 +443,19 @@ export default function RaceSimulator({ raceId }) {
         <div className="flex-1 overflow-y-auto">
           {ui.standings.map((s, i) => {
             const isF = s.code === focused;
+            const isC = compare.includes(s.code);
             const dim = focused && !isF;
             return (
-              <button
+              <div
                 key={s.code}
+                role="button"
+                tabIndex={0}
                 onClick={() => selectDriver(s.code)}
+                onKeyDown={(e) => e.key === "Enter" && selectDriver(s.code)}
                 className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left cursor-pointer border-l-2 transition-colors ${
                   isF ? "bg-[#e10600]/15" : "hover:bg-[#1b2431]"
                 } ${dim ? "opacity-40" : ""}`}
-                style={{ borderColor: isF ? getTeamColor(s.team) : "transparent" }}
+                style={{ borderColor: isF || isC ? getTeamColor(s.team) : "transparent" }}
               >
                 <span className="w-4 text-xs text-gray-500 text-right">{i + 1}</span>
                 <span
@@ -416,12 +468,26 @@ export default function RaceSimulator({ raceId }) {
                 <span className="text-[11px] text-gray-500">
                   {s.live ? `L${s.lap}` : "OUT"}
                 </span>
-              </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleCompare(s.code);
+                  }}
+                  title={isC ? "Remove from comparison" : "Add to comparison"}
+                  className={`w-5 h-5 rounded-full text-xs leading-none flex items-center justify-center cursor-pointer border transition-colors ${
+                    isC
+                      ? "border-[#e10600] text-[#e10600] bg-[#e10600]/10"
+                      : "border-[#26303f] text-gray-500 hover:text-white hover:border-gray-500"
+                  }`}
+                >
+                  {isC ? "−" : "+"}
+                </button>
+              </div>
             );
           })}
         </div>
         <div className="px-3 py-1.5 border-t border-[#26303f] text-[11px] text-gray-500">
-          Click a driver to focus
+          Click to focus · + to compare
         </div>
       </div>
     </div>

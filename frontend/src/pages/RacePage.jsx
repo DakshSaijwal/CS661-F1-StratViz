@@ -5,12 +5,17 @@ import PositionChart from "../components/charts/PositionChart";
 import PitStopGantt from "../components/charts/PitStopGantt";
 import ParallelCoordinates from "../components/charts/ParallelCoordinates";
 import RaceSimulator from "../components/simulator/RaceSimulator";
+import TrackView from "../components/simulator/TrackView";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
 import raceData from "../constants/raceLocations.json";
 
+const TELEMETRY_MIN_YEAR = 2018;
+const TELEMETRY_MAX_YEAR = 2024;
+
 /**
  * Race Detail Page — /race/:season/:raceId
- * 3 regions: Left leaderboard, Center simulator placeholder, Bottom toggle panels
+ * 3 regions: Left leaderboard, Center race simulator (2018-2024) or static
+ * track preview (older seasons), Bottom toggle panels
  */
 export default function RacePage() {
   const { season, raceId } = useParams();
@@ -97,9 +102,13 @@ export default function RacePage() {
 
       {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col overflow-y-auto">
-        {/* CENTER — Race Simulator */}
+        {/* CENTER — Race Simulator (2018-2024) or static track (older) */}
         <div className="flex-1 min-h-[400px]">
-          <RaceSimulator raceId={raceId} />
+          {seasonNum >= TELEMETRY_MIN_YEAR && seasonNum <= TELEMETRY_MAX_YEAR ? (
+            <RaceSimulator raceId={raceId} />
+          ) : (
+            <TrackView raceId={raceId} raceName={raceInfo.race_name} />
+          )}
         </div>
 
         {/* BOTTOM — Toggle buttons + panel */}

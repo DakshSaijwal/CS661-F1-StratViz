@@ -1,7 +1,10 @@
 """
 Fetch telemetry + track status + circuit geometry from FastF1 (2018-2024).
 Produces 3 parquet files:
-  - telemetry.parquet: X, Y, distance, speed per driver per lap (downsampled to ~100 pts/lap)
+  - telemetry.parquet: X, Y, distance, speed, throttle, brake, t (seconds since
+    race start) per driver per lap (downsampled to ~100 pts/lap). Sorted by
+    race_id so DuckDB-WASM's HTTP range reads can prune to one race without
+    downloading the whole file.
   - track_status.parquet: safety car, VSC, red flag events with timestamps
   - circuits.parquet: track shape polyline per circuit (from fastest lap)
 
@@ -10,6 +13,7 @@ Takes ~2-4 hours on first run (FastF1 downloads telemetry per session).
 Subsequent runs use cache and skip completed sessions.
 """
 import sys
+import argparse
 import warnings
 import time
 import fastf1
@@ -43,22 +47,29 @@ def progress_bar(current, total, prefix="", width=40):
 def downsample_telemetry(tel_df, n_points=TELEMETRY_POINTS_PER_LAP):
     """
     Downsample telemetry to n_points evenly spaced by distance.
-    Keeps X, Y, Distance, Speed columns.
+    Keeps X, Y, Distance, Speed, Throttle, Brake, and elapsed session time (t).
     Returns a DataFrame with exactly n_points rows (or fewer if lap is short).
     """
     if tel_df is None or tel_df.empty:
         return None
+
+    tel_df = tel_df.copy()
+    # SessionTime is a Timedelta; convert to float seconds for interpolation/animation
+    time_col = "SessionTime" if "SessionTime" in tel_df.columns else "Time"
+    tel_df["t"] = tel_df[time_col].dt.total_seconds()
+
+    cols = ["X", "Y", "Distance", "Speed", "Throttle", "Brake", "t"]
 
     # Sort by distance
     tel_df = tel_df.sort_values("Distance").reset_index(drop=True)
 
     # If fewer points than target, return as-is
     if len(tel_df) <= n_points:
-        return tel_df[["X", "Y", "Distance", "Speed"]].copy()
+        return tel_df[cols].copy()
 
     # Evenly space by index (simpler and robust)
     indices = np.linspace(0, len(tel_df) - 1, n_points, dtype=int)
-    sampled = tel_df.iloc[indices][["X", "Y", "Distance", "Speed"]].reset_index(drop=True)
+    sampled = tel_df.iloc[indices][cols].reset_index(drop=True)
     return sampled
 
 
@@ -112,6 +123,9 @@ def extract_telemetry(session, race_id, driver_mapping):
                         "y": round(float(row["Y"]), 1),
                         "distance": round(float(row["Distance"]), 1),
                         "speed": round(float(row["Speed"]), 1),
+                        "throttle": round(float(row["Throttle"]), 1) if pd.notna(row["Throttle"]) else 0.0,
+                        "brake": bool(row["Brake"]) if pd.notna(row["Brake"]) else False,
+                        "t_raw": round(float(row["t"]), 3),
                     })
             except Exception:
                 continue
@@ -222,29 +236,84 @@ def build_driver_mapping():
     return mapping
 
 
+def session_driver_mapping(session):
+    """
+    Fallback driver mapping (3-letter abbreviation -> Ergast-style driver id,
+    e.g. VER -> max_verstappen) built straight from a loaded session's results.
+    Lets a single-race fetch resolve driver ids without the Jolpica cache.
+    """
+    mapping = {}
+    try:
+        res = session.results
+        if res is None or res.empty:
+            return mapping
+        for _, row in res.iterrows():
+            abbr = str(row.get("Abbreviation", "") or "")
+            did = str(row.get("DriverId", "") or "")
+            if abbr and did:
+                mapping[abbr] = did
+    except Exception:
+        pass
+    return mapping
+
+
 def main():
+    # The progress bar uses Unicode block chars; Windows' default cp1252 console
+    # can't encode them. Force UTF-8 so the run doesn't crash mid-fetch.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+    parser = argparse.ArgumentParser(description="Fetch F1 replay telemetry from FastF1.")
+    parser.add_argument(
+        "--race", nargs=2, type=int, metavar=("SEASON", "ROUND"),
+        help="Fetch a single race only, e.g. --race 2023 1 (fast; for verification / gap-filling).",
+    )
+    parser.add_argument(
+        "--out", type=str, default=None,
+        help="Output directory for the parquet files (default: ./output). "
+             "Point at frontend/public to test locally without uploading.",
+    )
+    args = parser.parse_args()
+
+    out_dir = Path(args.out).resolve() if args.out else OUTPUT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     print("=" * 60)
-    print("TELEMETRY PIPELINE: Fetching race replay data (2018-2024)")
+    if args.race:
+        print(f"TELEMETRY PIPELINE: Fetching single race {args.race[0]} R{args.race[1]}")
+    else:
+        print("TELEMETRY PIPELINE: Fetching race replay data (2018-2024)")
     print("=" * 60)
-    print(f"  Output: {OUTPUT_DIR}")
+    print(f"  Output: {out_dir}")
     print(f"  Cache:  {CACHE_DIR}")
     print(f"  Points per lap: {TELEMETRY_POINTS_PER_LAP}")
     print()
 
-    # Build driver mapping
+    # Build driver mapping (Jolpica cache if present; per-session fallback below)
     print("Loading driver mapping...", flush=True)
     driver_mapping = build_driver_mapping()
-    print(f"  Mapped {len(driver_mapping)} driver codes", flush=True)
+    print(f"  Mapped {len(driver_mapping)} driver codes from Jolpica cache", flush=True)
     print()
 
-    # Count total races for overall progress
+    # Build event list
     all_events = []
-    for season in SEASONS:
-        schedule = fastf1.get_event_schedule(season, include_testing=False)
-        races = schedule[schedule["EventFormat"] != "testing"]
-        for _, event in races.iterrows():
-            all_events.append((season, int(event["RoundNumber"]), event["EventName"],
-                              event.get("OfficialEventName", event["EventName"])))
+    if args.race:
+        season, round_num = args.race
+        try:
+            event = fastf1.get_event(season, round_num)
+            name = event["EventName"]
+        except Exception:
+            name = f"Round {round_num}"
+        all_events.append((season, round_num, name, name))
+    else:
+        for season in SEASONS:
+            schedule = fastf1.get_event_schedule(season, include_testing=False)
+            races = schedule[schedule["EventFormat"] != "testing"]
+            for _, event in races.iterrows():
+                all_events.append((season, int(event["RoundNumber"]), event["EventName"],
+                                  event.get("OfficialEventName", event["EventName"])))
 
     total_races = len(all_events)
     print(f"Total races to process: {total_races}")
@@ -277,8 +346,11 @@ def main():
             errors.append(f"{race_id}: Failed to load session")
             continue
 
+        # Merge per-session driver ids (fills gaps when the Jolpica cache is absent)
+        session_map = {**session_driver_mapping(session), **driver_mapping}
+
         # Extract telemetry
-        tel_rows = extract_telemetry(session, race_id, driver_mapping)
+        tel_rows = extract_telemetry(session, race_id, session_map)
         if tel_rows:
             all_telemetry.extend(tel_rows)
 
@@ -316,6 +388,13 @@ def main():
     print("Saving telemetry.parquet...", flush=True)
     if all_telemetry:
         tel_df = pd.DataFrame(all_telemetry)
+
+        # Normalize t_raw (FastF1 session time) to seconds-since-race-start per race,
+        # so the frontend can drive playback off a simple sim clock starting at 0.
+        tel_df["t"] = tel_df["t_raw"] - tel_df.groupby("race_id")["t_raw"].transform("min")
+        tel_df = tel_df.drop(columns=["t_raw"])
+        tel_df["throttle"] = tel_df["throttle"].clip(0, 100)
+
         tel_df = tel_df.astype({
             "lap_number": "int16",
             "sample_index": "int8",
@@ -323,9 +402,21 @@ def main():
             "y": "float32",
             "distance": "float32",
             "speed": "float32",
+            "throttle": "uint8",
+            "brake": "uint8",
+            "t": "float32",
         })
-        tel_df.to_parquet(OUTPUT_DIR / "telemetry.parquet", index=False)
-        print(f"  telemetry.parquet: {len(tel_df):,} rows ({(OUTPUT_DIR / 'telemetry.parquet').stat().st_size / 1024 / 1024:.1f} MB)")
+
+        # Sort by race_id (then driver/lap/sample) so DuckDB-WASM's HTTP range
+        # reads can skip row groups/pages for races other than the one requested.
+        tel_df = tel_df.sort_values(
+            ["race_id", "driver", "lap_number", "sample_index"]
+        ).reset_index(drop=True)
+
+        tel_df.to_parquet(
+            out_dir / "telemetry.parquet", index=False, row_group_size=200_000
+        )
+        print(f"  telemetry.parquet: {len(tel_df):,} rows ({(out_dir / 'telemetry.parquet').stat().st_size / 1024 / 1024:.1f} MB)")
     else:
         print("  WARNING: No telemetry data collected!")
 
@@ -333,7 +424,7 @@ def main():
     print("Saving track_status.parquet...", flush=True)
     if all_track_status:
         ts_df = pd.DataFrame(all_track_status)
-        ts_df.to_parquet(OUTPUT_DIR / "track_status.parquet", index=False)
+        ts_df.to_parquet(out_dir / "track_status.parquet", index=False)
         print(f"  track_status.parquet: {len(ts_df):,} rows")
     else:
         print("  WARNING: No track status data collected!")
@@ -352,7 +443,7 @@ def main():
             "y": "float32",
             "distance": "float32",
         })
-        circ_df.to_parquet(OUTPUT_DIR / "circuits.parquet", index=False)
+        circ_df.to_parquet(out_dir / "circuits.parquet", index=False)
         print(f"  circuits.parquet: {len(circ_df):,} rows ({len(all_circuits)} circuits)")
     else:
         print("  WARNING: No circuit geometry collected!")
@@ -372,7 +463,7 @@ def main():
     print()
     print("Output files:")
     for f in ["telemetry.parquet", "track_status.parquet", "circuits.parquet"]:
-        p = OUTPUT_DIR / f
+        p = out_dir / f
         if p.exists():
             size_mb = p.stat().st_size / 1024 / 1024
             print(f"  {f}: {size_mb:.1f} MB")

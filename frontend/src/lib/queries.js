@@ -187,6 +187,27 @@ export async function getPitStopGanttData(raceId) {
 }
 
 /**
+ * All per-lap columns the simulator's comparison panel needs, for every
+ * driver in one race (fetched once so toggling driver selections never
+ * refetches). Returns [] for races without laps data (pre-2022) — the panel
+ * falls back to telemetry-derived stats.
+ */
+export async function getComparisonLapData(raceId) {
+  try {
+    return await query(`
+      SELECT driver, team, lap_number, position, compound,
+        lap_time_seconds, gap_to_leader_seconds, tire_age_laps,
+        (pit_in_flag OR pit_out_flag) AS is_pit_lap
+      FROM laps
+      WHERE race_id = '${raceId}'
+      ORDER BY driver, lap_number
+    `);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Per-stint strategy summary for ParallelCoordinates chart.
  * Averages lap time across each stint (excluding pit in/out laps).
  * Returns: [{ stint_id, driver, avg_lap_time, compound, stint_length, tire_age_at_end, starting_position }, ...]
