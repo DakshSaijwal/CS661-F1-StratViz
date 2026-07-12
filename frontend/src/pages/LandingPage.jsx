@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import WorldMap from "../components/WorldMap";
+import SplashScreen from "../components/SplashScreen";
 import ChampionshipChart from "../components/charts/ChampionshipChart";
 import EraBumpChart from "../components/charts/EraBumpChart";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
@@ -10,8 +11,13 @@ import raceData from "../constants/raceLocations.json";
 const ALL_YEARS = Array.from({ length: 25 }, (_, i) => 2000 + i); // 2000-2024
 const WINDOW_SIZE = 7;
 
+// Module-level flag: true after first render within a JS session.
+// Resets on hard refresh/new tab; survives SPA back-navigation.
+let _splashDone = false;
+
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [showSplash, setShowSplash] = useState(() => !_splashDone);
   const [selectedYear, setSelectedYear] = useState(2024);
   const [windowStart, setWindowStart] = useState(ALL_YEARS.length - WINDOW_SIZE);
   const [showOverYears, setShowOverYears] = useState(false);
@@ -58,12 +64,13 @@ export default function LandingPage() {
     setWindowStart((s) => Math.min(ALL_YEARS.length - WINDOW_SIZE, s + 1));
   }
 
-  function handleRaceClick(race) {
+  const handleRaceClick = useCallback((race) => {
     navigate(`/race/${selectedYear}/${race.race_id}`);
-  }
+  }, [navigate, selectedYear]);
 
   return (
     <div className="relative w-full h-screen bg-[#0a0e14] overflow-hidden">
+      {showSplash && <SplashScreen onDone={() => { _splashDone = true; setShowSplash(false); }} />}
       {/* World Map (full background) */}
       <div className="absolute inset-0">
         <WorldMap races={races} onRaceClick={handleRaceClick} />
