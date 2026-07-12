@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getChampionshipStandings, getRaceLeaderboard } from "../lib/queries";
 import ChampionshipChart from "../components/charts/ChampionshipChart";
+import PositionChart from "../components/charts/PositionChart";
+import PitStopGantt from "../components/charts/PitStopGantt";
+import ParallelCoordinates from "../components/charts/ParallelCoordinates";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
 import raceData from "../constants/raceLocations.json";
 
@@ -133,6 +136,7 @@ export default function RacePage() {
             {[
               { id: "tire", label: "Tire Strategy" },
               { id: "position", label: "Lap-by-Lap Position" },
+              { id: "strategy", label: "Strategic Archetypes" },
               { id: "championship", label: "Championship Standings" },
             ].map(({ id, label }) => (
               <button
@@ -151,16 +155,15 @@ export default function RacePage() {
 
           {/* Toggle panel content */}
           {activeToggle && (
-            <div className="px-6 py-4 bg-[#0a0e14] max-h-[400px] overflow-y-auto">
+            <div className="px-6 py-4 bg-[#0a0e14] max-h-[85vh] overflow-y-auto">
               {activeToggle === "tire" && (
-                <div className="h-[300px] border border-dashed border-[#26303f] rounded-lg flex items-center justify-center">
-                  <span className="text-gray-500 text-sm">Pit Stop Gantt Chart — placeholder</span>
-                </div>
+                <PitStopGantt raceId={raceId} />
               )}
               {activeToggle === "position" && (
-                <div className="h-[300px] border border-dashed border-[#26303f] rounded-lg flex items-center justify-center">
-                  <span className="text-gray-500 text-sm">Position Chart — placeholder</span>
-                </div>
+                <PositionChart raceId={raceId} />
+              )}
+              {activeToggle === "strategy" && (
+                <ParallelCoordinates raceId={raceId} />
               )}
               {activeToggle === "championship" && (
                 chartLoading ? (

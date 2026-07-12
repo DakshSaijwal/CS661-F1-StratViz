@@ -113,11 +113,12 @@ export async function getRaceList(season) {
 
 /**
  * Position chart — driver positions across laps.
- * Returns: [{ driver, team, lap_number, position }, ...]
+ * Returns: [{ driver, team, lap_number, position, compound, pit_flag }, ...]
  */
 export async function getPositionChartData(raceId) {
   return query(`
-    SELECT driver, team, lap_number, position
+    SELECT driver, team, lap_number, position, compound,
+      (pit_in_flag OR pit_out_flag) AS pit_flag
     FROM laps
     WHERE race_id = '${raceId}'
     ORDER BY lap_number, position
@@ -164,6 +165,36 @@ export async function getPitStopGanttData(raceId) {
     FROM stints
     WHERE race_id = '${raceId}'
     ORDER BY driver, stint_number
+  `);
+}
+
+/**
+ * Per-stint strategy summary for ParallelCoordinates chart.
+ * Averages lap time across each stint (excluding pit in/out laps).
+ * Returns: [{ stint_id, driver, avg_lap_time, compound, stint_length, tire_age_at_end, starting_position }, ...]
+ */
+export async function getStintStrategyData(raceId) {
+  return query(`
+    SELECT
+      s.race_id || '_' || s.driver || '_' || s.stint_number AS stint_id,
+      s.driver,
+      AVG(l.lap_time_seconds) AS avg_lap_time,
+      s.compound,
+      s.stint_length,
+      MAX(l.tire_age_laps) AS tire_age_at_end,
+      r.grid_position AS starting_position
+    FROM stints s
+    JOIN laps l
+      ON l.race_id = s.race_id
+      AND l.driver = s.driver
+      AND l.lap_number BETWEEN s.start_lap AND s.end_lap
+      AND NOT l.pit_in_flag AND NOT l.pit_out_flag
+    JOIN results r
+      ON r.season = l.season AND r.round = l.round AND r.driver = s.driver
+    WHERE s.race_id = '${raceId}'
+    GROUP BY s.race_id, s.driver, s.stint_number, s.compound, s.stint_length, r.grid_position
+    HAVING AVG(l.lap_time_seconds) IS NOT NULL AND r.grid_position IS NOT NULL
+    ORDER BY s.driver, s.stint_number
   `);
 }
 

@@ -43,9 +43,10 @@ Three regions:
 
 2. **Center (Race Simulator)**: Placeholder area for future animated race replay. Shows disabled play button + lap counter. Do not build simulator logic yet.
 
-3. **Bottom (Toggle Panels)**: Three buttons — only one panel open at a time:
-   - **Tire Strategy** — placeholder for PitStopGantt chart (not yet built)
-   - **Lap-by-Lap Position** — placeholder for PositionChart (not yet built)
+3. **Bottom (Toggle Panels)**: Four buttons — only one panel open at a time:
+   - **Tire Strategy** — WORKING, `PitStopGantt` Gantt chart with animated playback, driver swap picker, compound-colored bars
+   - **Lap-by-Lap Position** — WORKING, `PositionChart` animated D3 bump chart with play/pause, 5-driver comparison chips, pit stop markers, compound color bands
+   - **Strategic Archetypes** — WORKING, `ParallelCoordinates` parallel coordinates plot of stint strategy (avg lap time, compound, stint length, tire age, grid position) with brush filtering
    - **Championship Standings** — WORKING, uses `ChampionshipChart` with real data from HF
 
 ---
@@ -71,16 +72,21 @@ Three regions:
 │       │                            #   This is the "API" all components call.
 │       │
 │       ├── components/
-│       │   ├── WorldMap.jsx         # D3 world map with race pins + magnifying lens
-│       │   │                        #   Props: { races: [{race_id, round, race_name, lat, lng}],
-│       │   │                        #            onRaceClick: (race) => void }
+│       │   ├── WorldMap.jsx         # D3 world map with race pins + zoom/pan
+│       │   │                        #   Props: { races, onRaceClick }
+│       │   ├── SlotDriverPicker.jsx # Shared driver swap dropdown for charts
 │       │   │
 │       │   ├── charts/              # VISUALIZATION COMPONENTS
-│       │   │   └── ChampionshipChart.jsx
-│       │   │       # Recharts line chart: cumulative points per driver across rounds
-│       │   │       # Props: { data: [{driver, round, cumulative_points, constructor}],
-│       │   │       #          highlightDrivers?: string[] }
-│       │   │       # NEEDS TO BE BUILT: PositionChart.jsx, PitStopGantt.jsx
+│       │   │   ├── ChampionshipChart.jsx  # Recharts cumulative points line chart
+│       │   │   ├── PositionChart.jsx      # D3 animated position bump chart (5 drivers,
+│       │   │   │                          #   play/pause, compound bands, pit markers)
+│       │   │   │                          #   Self-contained: fetches via getPositionChartData()
+│       │   │   ├── PitStopGantt.jsx       # SVG Gantt chart of tire stints (5 drivers,
+│       │   │   │                          #   play/pause, compound colors, driver swap)
+│       │   │   │                          #   Self-contained: fetches via getPitStopGanttData()
+│       │   │   └── ParallelCoordinates.jsx # D3 parallel coordinates for stint strategy
+│       │   │                              #   (brushable axes, compound-colored lines)
+│       │   │                              #   Self-contained: fetches via getStintStrategyData()
 │       │   │
 │       │   └── layout/              # SHARED UI COMPONENTS
 │       │       ├── Navbar.jsx           # Top nav (currently unused in 2-page layout)
@@ -159,7 +165,7 @@ const leaderboard = await getRaceLeaderboard(2023, 1);
 | `getRaceOutcomesGrid(season)` | `2023` | `[{ round, position, driver, team, dnf }]` |
 | `getSeasonStatCards(season)` | `2023` | `{ champion, race_count, constructor_champion, fastest_lap_holder }` |
 | `getRaceList(season)` | `2023` | `[{ round, race_name, circuit_name, country, date }]` |
-| `getPositionChartData(raceId)` | `"2023_1"` | `[{ driver, team, lap_number, position }]` |
+| `getPositionChartData(raceId)` | `"2023_1"` | `[{ driver, team, lap_number, position, compound, pit_flag }]` |
 | `getLapTimeScatterData(raceId)` | `"2023_1"` | `[{ driver, team, lap_number, lap_time_seconds, compound, is_pit_lap }]` |
 | `getGapToLeaderData(raceId)` | `"2023_1"` | `[{ driver, team, lap_number, gap_to_leader_seconds }]` |
 | `getPitStopGanttData(raceId)` | `"2023_1"` | `[{ driver, stint_number, compound, start_lap, end_lap, stint_length }]` |
@@ -170,6 +176,7 @@ const leaderboard = await getRaceLeaderboard(2023, 1);
 | `getDriverList(range)` | `{start:2022, end:2024}` | `[{ driver, team }]` |
 | `getTeamList(season)` | `2023` | `[{ constructor }]` |
 | `getRaceLeaderboard(season, round)` | `2023, 1` | `[{ position, driver, team, points, status }]` |
+| `getStintStrategyData(raceId)` | `"2023_1"` | `[{ stint_id, driver, avg_lap_time, compound, stint_length, tire_age_at_end, starting_position }]` |
 
 ### Key conventions
 - **`season`** — integer, e.g. `2023`
@@ -186,30 +193,19 @@ const leaderboard = await getRaceLeaderboard(2023, 1);
 
 ### Charts needed (in `src/components/charts/`)
 
-1. **PositionChart.jsx** — Lap-by-lap position changes (bump chart / line chart)
-   - Data: `getPositionChartData(raceId)` → `[{ driver, team, lap_number, position }]`
-   - Shows each driver's track position across all laps of a race
-   - Goes in RacePage toggle panel "Lap-by-Lap Position"
-
-2. **PitStopGantt.jsx** — Tire strategy Gantt chart
-   - Data: `getPitStopGanttData(raceId)` → `[{ driver, stint_number, compound, start_lap, end_lap, stint_length }]`
-   - Horizontal bars per driver showing tire stints, colored by compound (SOFT=red, MEDIUM=yellow, HARD=white)
-   - Goes in RacePage toggle panel "Tire Strategy"
-   - Use compound colors from `src/constants/f1Colors.js`
-
-3. **Race Simulator** (center of RacePage)
+1. **Race Simulator** (center of RacePage)
    - Animated replay of all laps using real driver lap times
    - Data: `telemetry.parquet` (X/Y positions, 100 samples/lap) + `circuits.parquet` (track shape)
    - Additional context: `track_status.parquet` (safety car / VSC overlays)
    - Play/pause/scrub controls, lap counter
    - This is the main feature of Page 2
 
-4. **Championship Progress visualization** (Page 1, bottom-right panel)
+2. **Championship Progress visualization** (Page 1, bottom-right panel)
    - Placeholder already wired in LandingPage.jsx
    - Receives `selectedYear` as context
    - Replace the placeholder `<span>` with your chart component
 
-5. **"Over the Years" visualization** (Page 1, modal popup)
+3. **"Over the Years" visualization** (Page 1, modal popup)
    - Placeholder modal already wired in LandingPage.jsx
    - Triggered by "Over the Years" button in top bar
    - Full-screen modal (80vw × 70vh) — replace placeholder with cross-season chart

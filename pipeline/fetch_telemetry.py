@@ -75,7 +75,10 @@ def fetch_session_safe(season, round_num):
 def extract_telemetry(session, race_id, driver_mapping):
     """Extract downsampled telemetry for all drivers in a session."""
     rows = []
-    laps = session.laps
+    try:
+        laps = session.laps
+    except Exception:
+        return rows
     if laps is None or laps.empty:
         return rows
 
