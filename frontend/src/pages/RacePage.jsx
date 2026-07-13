@@ -6,6 +6,7 @@ import PitStopGantt from "../components/charts/PitStopGantt";
 import ParallelCoordinates from "../components/charts/ParallelCoordinates";
 import RaceSimulator from "../components/simulator/RaceSimulator";
 import TrackView from "../components/simulator/TrackView";
+import DriverProfile from "../components/profile/DriverProfile";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
 import FallbackImage from "../components/FallbackImage";
 import { getTeamLogo, getTeamLogoScale, getDriverImageCandidates } from "../constants/teamAssets";
@@ -34,17 +35,21 @@ export default function RacePage() {
   // Leaderboard placeholder data (will be replaced with real query)
   const [leaderboard, setLeaderboard] = useState([]);
   const [activeToggle, setActiveToggle] = useState(null);
+  // Driver profile overlay in the center pane (null = show telemetry)
+  const [selectedDriver, setSelectedDriver] = useState(null);
+
+  const round = Number(raceId.split("_")[1]);
 
   // Fetch real leaderboard from HF via DuckDB
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
   useEffect(() => {
     setLeaderboardLoading(true);
-    const round = raceId.split("_")[1];
-    getRaceLeaderboard(seasonNum, Number(round)).then((data) => {
+    setSelectedDriver(null); // reset profile when the race changes
+    getRaceLeaderboard(seasonNum, round).then((data) => {
       setLeaderboard(data);
       setLeaderboardLoading(false);
     });
-  }, [raceId, seasonNum]);
+  }, [raceId, seasonNum, round]);
 
   function formatDriverName(driver) {
     return driver
@@ -90,8 +95,10 @@ export default function RacePage() {
               return (
                 <div
                   key={i}
-                  onClick={() => console.log("Driver clicked:", entry.driver)}
-                  className="flex items-center gap-3 px-3 py-4 rounded-lg cursor-pointer hover:bg-[#1b2431] transition-colors"
+                  onClick={() => setSelectedDriver(entry)}
+                  className={`flex items-center gap-3 px-3 py-4 rounded-lg cursor-pointer transition-colors ${
+                    selectedDriver?.driver === entry.driver ? "bg-[#1b2431] ring-1 ring-[#e10600]/50" : "hover:bg-[#1b2431]"
+                  }`}
                 >
                   <span className="w-6 text-center text-base font-bold text-gray-300 flex-shrink-0">
                     {entry.position}
@@ -133,8 +140,10 @@ export default function RacePage() {
             return (
               <div
                 key={i}
-                onClick={() => console.log("Driver clicked:", entry.driver)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-[#1b2431] transition-colors"
+                onClick={() => setSelectedDriver(entry)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                  selectedDriver?.driver === entry.driver ? "bg-[#1b2431] ring-1 ring-[#e10600]/50" : "hover:bg-[#1b2431]"
+                }`}
               >
                 <span className={`w-6 text-center text-sm font-bold ${
                   entry.status === "DNF" ? "text-red-500" : "text-gray-300"
@@ -164,9 +173,18 @@ export default function RacePage() {
 
       {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col overflow-y-auto">
-        {/* CENTER — Race Simulator (2018-2024) or static track (older) */}
+        {/* CENTER — Driver profile (when a driver is picked) else the
+            Race Simulator (2018-2024) / static track (older seasons) */}
         <div className="flex-1 min-h-[400px]">
-          {seasonNum >= TELEMETRY_MIN_YEAR && seasonNum <= TELEMETRY_MAX_YEAR ? (
+          {selectedDriver ? (
+            <DriverProfile
+              entry={selectedDriver}
+              season={seasonNum}
+              round={round}
+              raceName={raceInfo.race_name}
+              onBack={() => setSelectedDriver(null)}
+            />
+          ) : seasonNum >= TELEMETRY_MIN_YEAR && seasonNum <= TELEMETRY_MAX_YEAR ? (
             <RaceSimulator raceId={raceId} />
           ) : (
             <TrackView raceId={raceId} raceName={raceInfo.race_name} />

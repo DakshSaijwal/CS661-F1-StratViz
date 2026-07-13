@@ -406,6 +406,174 @@ export async function getRaceLeaderboard(season, round) {
 }
 
 // ============================================================
+// DRIVER PROFILE PAGE
+// ============================================================
+
+const esc = (s) => String(s).replace(/'/g, "''");
+
+/**
+ * Circuit + race name for a given season/round (used to scope the
+ * "this circuit" stats on a driver profile).
+ * Returns { circuit_name, race_name } or null.
+ */
+export async function getRaceCircuit(season, round) {
+  const [row] = await query(`
+    SELECT circuit_name, race_name
+    FROM results
+    WHERE season = ${season} AND round = ${round}
+    LIMIT 1
+  `);
+  return row || null;
+}
+
+/**
+ * Career aggregate stats for a driver across all seasons.
+ * Returns a single object of totals + rates + team + championship titles.
+ */
+export async function getDriverCareerStats(driver) {
+  const d = esc(driver);
+  const [core] = await query(`
+    SELECT
+      COUNT(*) AS races,
+      SUM(CASE WHEN finish_position = 1 THEN 1 ELSE 0 END) AS wins,
+      SUM(CASE WHEN finish_position <= 3 THEN 1 ELSE 0 END) AS podiums,
+      SUM(CASE WHEN finish_position <= 10 THEN 1 ELSE 0 END) AS points_finishes,
+      SUM(CASE WHEN grid_position = 1 THEN 1 ELSE 0 END) AS poles,
+      SUM(points) AS points,
+      SUM(CASE WHEN fastest_lap_rank = 1 THEN 1 ELSE 0 END) AS fastest_laps,
+      SUM(CASE WHEN finish_position IS NULL THEN 1 ELSE 0 END) AS dnfs,
+      AVG(finish_position) AS avg_finish,
+      AVG(grid_position) AS avg_grid,
+      MIN(finish_position) AS best_finish,
+      MIN(season) AS first_season,
+      MAX(season) AS last_season,
+      COUNT(DISTINCT season) AS seasons
+    FROM results
+    WHERE driver = '${d}'
+  `);
+
+  const [title] = await query(`
+    SELECT COUNT(*) AS titles FROM (
+      SELECT s.season
+      FROM standings s
+      INNER JOIN (SELECT season, MAX(round) AS mr FROM standings GROUP BY season) l
+        ON s.season = l.season AND s.round = l.mr
+      WHERE s.driver = '${d}' AND s.position = 1
+    )
+  `);
+
+  const [team] = await query(`
+    SELECT constructor AS team
+    FROM results
+    WHERE driver = '${d}'
+    ORDER BY season DESC, round DESC
+    LIMIT 1
+  `);
+
+  return {
+    ...core,
+    titles: title?.titles ?? 0,
+    team: team?.team ?? null,
+  };
+}
+
+/**
+ * A driver's history at a specific circuit — one row per appearance.
+ * Returns [{ season, finish_position, grid_position, points, team, status }, ...]
+ */
+export async function getDriverCircuitHistory(driver, circuitName) {
+  return query(`
+    SELECT season, finish_position, grid_position, points,
+           constructor AS team, status
+    FROM results
+    WHERE driver = '${esc(driver)}' AND circuit_name = '${esc(circuitName)}'
+    ORDER BY season
+  `);
+}
+
+/**
+ * A driver's per-round performance within one season.
+ * Returns [{ round, race_name, finish_position, grid_position, points,
+ *            status, cumulative_points, championship_position }, ...]
+ */
+export async function getDriverSeasonPerformance(driver, season) {
+  return query(`
+    SELECT
+      r.round, r.race_name, r.finish_position, r.grid_position, r.points, r.status,
+      s.cumulative_points, s.position AS championship_position
+    FROM results r
+    LEFT JOIN standings s
+      ON s.season = r.season AND s.round = r.round AND s.driver = r.driver
+    WHERE r.driver = '${esc(driver)}' AND r.season = ${season}
+    ORDER BY r.round
+  `);
+}
+
+/**
+ * Season-by-season summary for a driver's whole career.
+ * Returns [{ season, points, wins, podiums, races, championship_position, team }, ...]
+ */
+export async function getDriverSeasonHistory(driver) {
+  const d = esc(driver);
+  const perSeason = await query(`
+    SELECT season,
+      SUM(points) AS points,
+      SUM(CASE WHEN finish_position = 1 THEN 1 ELSE 0 END) AS wins,
+      SUM(CASE WHEN finish_position <= 3 THEN 1 ELSE 0 END) AS podiums,
+      COUNT(*) AS races
+    FROM results
+    WHERE driver = '${d}'
+    GROUP BY season
+    ORDER BY season
+  `);
+  const finals = await query(`
+    SELECT s.season, s.position AS championship_position, s.constructor AS team
+    FROM standings s
+    INNER JOIN (SELECT season, MAX(round) AS mr FROM standings GROUP BY season) l
+      ON s.season = l.season AND s.round = l.mr
+    WHERE s.driver = '${d}'
+    ORDER BY s.season
+  `);
+  const finalBySeason = new Map(finals.map((f) => [f.season, f]));
+  return perSeason.map((r) => ({
+    ...r,
+    championship_position: finalBySeason.get(r.season)?.championship_position ?? null,
+    team: finalBySeason.get(r.season)?.team ?? null,
+  }));
+}
+
+/**
+ * Average finish position per circuit for a driver (circuit "mastery").
+ * Returns [{ circuit_name, avg_finish, races, wins }, ...] sorted best-first.
+ */
+export async function getDriverCircuitAverages(driver) {
+  return query(`
+    SELECT circuit_name,
+      AVG(finish_position) AS avg_finish,
+      COUNT(*) AS races,
+      SUM(CASE WHEN finish_position = 1 THEN 1 ELSE 0 END) AS wins
+    FROM results
+    WHERE driver = '${esc(driver)}' AND finish_position IS NOT NULL
+    GROUP BY circuit_name
+    ORDER BY avg_finish ASC
+  `);
+}
+
+/**
+ * Finishing-position distribution for a driver (histogram).
+ * Returns [{ position, count }, ...]
+ */
+export async function getDriverFinishDistribution(driver) {
+  return query(`
+    SELECT finish_position AS position, COUNT(*) AS count
+    FROM results
+    WHERE driver = '${esc(driver)}' AND finish_position IS NOT NULL
+    GROUP BY finish_position
+    ORDER BY finish_position
+  `);
+}
+
+// ============================================================
 // RACE SIMULATOR (pipeline/fetch_telemetry.py output, 2018-2024 only)
 // ============================================================
 
