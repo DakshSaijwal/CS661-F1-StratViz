@@ -5,8 +5,10 @@ import {
   Cell,
 } from "recharts";
 import FallbackImage from "../FallbackImage";
+import TeamLogo from "../TeamLogo";
 import ProfileTile from "./ProfileTile";
-import { getDriverImageCandidates, getTeamLogo } from "../../constants/teamAssets";
+import DriverUmap3D from "./DriverUmap3D";
+import { getDriverImageCandidates } from "../../constants/teamAssets";
 import { TEAM_COLORS } from "../../constants/f1Colors";
 import {
   getRaceCircuit, getDriverCareerStats, getDriverCircuitHistory,
@@ -77,7 +79,9 @@ export default function DriverProfile({ entry, season, round, raceName, onBack }
     return () => { alive = false; };
   }, [driver, season, round]);
 
-  const teamColor = (data?.career?.team && TEAM_COLORS[data.career.team]) || "#e10600";
+  // Team the driver actually raced for THIS weekend (not their latest team)
+  const team = entry.team || data?.career?.team;
+  const teamColor = TEAM_COLORS[team] || "#e10600";
 
   const header = (
     <div className="flex items-center gap-3 px-3 py-2 border-b border-[#26303f] flex-shrink-0 bg-[#0d131c]">
@@ -90,7 +94,7 @@ export default function DriverProfile({ entry, season, round, raceName, onBack }
       <div className="min-w-0">
         <div className="text-sm font-bold text-white truncate">{formatName(driver)}</div>
         <div className="text-[11px] text-gray-500 truncate">
-          {data?.career?.team || entry.team} · Driver Profile
+          {team} · Driver Profile
         </div>
       </div>
       <div className="ml-auto flex items-center gap-1 h-1 rounded-full" style={{ width: 60, backgroundColor: teamColor }} />
@@ -117,25 +121,25 @@ export default function DriverProfile({ entry, season, round, raceName, onBack }
       {header}
       <div className="flex-1 min-h-0 grid grid-cols-3 grid-rows-2 gap-2 p-2">
 
-        {/* SECTION 1 — Overview: photo + career stats */}
+        {/* SECTION 1 — Overview: large photo + career stats */}
         <ProfileTile title="Overview" accent={teamColor}
           pages={[
             <div key="ov" className="flex gap-3 h-full">
-              <div className="flex-shrink-0 w-[92px] flex flex-col items-center">
+              {/* Photo column — fills the tile height (~2.5x previous) */}
+              <div className="flex-shrink-0 w-[150px] flex flex-col items-center min-h-0">
                 <FallbackImage
                   sources={getDriverImageCandidates(driver)}
                   alt={formatName(driver)}
-                  className="w-[92px] h-[118px] object-contain object-top"
-                  fallback={<div className="w-[92px] h-[118px] flex items-center justify-center text-4xl text-gray-700">{formatName(driver).charAt(0)}</div>}
+                  className="flex-1 min-h-0 w-full object-cover object-top rounded-md"
+                  fallback={<div className="flex-1 min-h-0 w-full flex items-center justify-center text-6xl text-gray-700">{formatName(driver).charAt(0)}</div>}
                 />
-                <img
-                  src={getTeamLogo(c.team)}
-                  alt={c.team}
-                  onError={(e) => { e.currentTarget.src = "/f1.svg"; }}
-                  className="h-5 mt-1 object-contain"
-                />
+                <div className="flex items-center gap-2 mt-1.5 flex-shrink-0">
+                  <TeamLogo team={team} size={34} />
+                  <span className="text-[11px] text-gray-400 truncate max-w-[100px]" style={{ color: teamColor }}>{team}</span>
+                </div>
               </div>
-              <div className="flex-1 grid grid-cols-3 grid-rows-3 gap-1.5 min-w-0">
+              {/* Stats — 2 columns to sit beside the larger photo */}
+              <div className="flex-1 grid grid-cols-2 grid-rows-5 gap-1.5 min-w-0">
                 <Stat label="Races" value={races} />
                 <Stat label="Wins" value={n(c.wins)} accent={teamColor} />
                 <Stat label="Podiums" value={n(c.podiums)} accent={teamColor} />
@@ -145,6 +149,7 @@ export default function DriverProfile({ entry, season, round, raceName, onBack }
                 <Stat label="Best Fin" value={c.best_finish != null ? `P${n(c.best_finish)}` : "—"} />
                 <Stat label="Fast Laps" value={n(c.fastest_laps)} />
                 <Stat label="Avg Fin" value={c.avg_finish != null ? n(c.avg_finish).toFixed(1) : "—"} />
+                <Stat label="Seasons" value={n(c.seasons)} />
               </div>
             </div>,
           ]}
@@ -184,9 +189,10 @@ export default function DriverProfile({ entry, season, round, raceName, onBack }
           ]}
         />
 
-        {/* SECTION 6 — Performance radar */}
-        <ProfileTile title="Performance Profile" accent={teamColor}
+        {/* SECTION 6 — 3-D UMAP driver fingerprint (precomputed) + radar */}
+        <ProfileTile title="Driver DNA · 3-D UMAP" accent={teamColor}
           pages={[
+            <DriverUmap3D key="umap" driver={driver} />,
             <div key="radar" className="w-full h-full">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={[

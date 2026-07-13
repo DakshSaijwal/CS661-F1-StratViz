@@ -453,13 +453,11 @@ export async function getDriverCareerStats(driver) {
   `);
 
   const [title] = await query(`
-    SELECT COUNT(*) AS titles FROM (
-      SELECT s.season
-      FROM standings s
-      INNER JOIN (SELECT season, MAX(round) AS mr FROM standings GROUP BY season) l
-        ON s.season = l.season AND s.round = l.mr
-      WHERE s.driver = '${d}' AND s.position = 1
-    )
+    SELECT COUNT(DISTINCT s.season) AS titles
+    FROM standings s
+    INNER JOIN (SELECT season, MAX(round) AS mr FROM standings GROUP BY season) l
+      ON s.season = l.season AND s.round = l.mr
+    WHERE s.driver = '${d}' AND s.position = 1
   `);
 
   const [team] = await query(`
