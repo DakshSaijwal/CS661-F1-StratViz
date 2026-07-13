@@ -123,9 +123,10 @@ function UmapCanvas({ points, driver, big = false }) {
     if (drag.current.active) {
       const dx = e.clientX - drag.current.lx;
       const dy = e.clientY - drag.current.ly;
-      // Natural "grab & drag": scene follows the cursor
+      // Natural "grab & drag": the front of the cloud follows the cursor.
+      // The projection makes the two axes need opposite signs.
       rot.current.ay -= dx * 0.008;
-      rot.current.ax -= dy * 0.008;
+      rot.current.ax += dy * 0.008;
       rot.current.ax = Math.max(-1.4, Math.min(1.4, rot.current.ax));
       drag.current.lx = e.clientX; drag.current.ly = e.clientY;
       drag.current.idle = 0;
@@ -234,7 +235,7 @@ export default function DriverUmap3D({ driver }) {
       <div className="relative w-full h-full">
         <UmapCanvas points={points} driver={driver} />
         <div className="absolute top-1 left-1 text-[8px] text-gray-500 leading-tight pointer-events-none">
-          drag to rotate · scroll to zoom
+          each dot = a driver · similar careers cluster<br />drag to rotate · scroll to zoom
         </div>
         <button
           onClick={() => setFull(true)}

@@ -193,7 +193,7 @@ export default function DriverProfile({ entry, season, round, raceName, onBack }
         <ProfileTile title="Driver DNA · 3-D UMAP" accent={teamColor}
           pages={[
             <DriverUmap3D key="umap" driver={driver} />,
-            <div key="radar" className="w-full h-full">
+            <Framed key="radar" caption="Career rate profile (% of races)">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={[
                   { k: "Win %", v: rate(c.wins) },
@@ -209,7 +209,7 @@ export default function DriverProfile({ entry, season, round, raceName, onBack }
                   <Tooltip {...tooltipStyle} />
                 </RadarChart>
               </ResponsiveContainer>
-            </div>,
+            </Framed>,
           ]}
         />
       </div>
@@ -228,14 +228,16 @@ function CircuitSummary({ history, accent }) {
   const avg = finishes.length ? finishes.reduce((s, h) => s + n(h.finish_position), 0) / finishes.length : null;
   const pts = history.reduce((s, h) => s + n(h.points), 0);
   return (
-    <div className="grid grid-cols-3 grid-rows-2 gap-1.5 h-full">
-      <Stat label="Starts" value={starts} />
-      <Stat label="Wins" value={wins} accent={accent} />
-      <Stat label="Podiums" value={podiums} accent={accent} />
-      <Stat label="Best" value={best != null ? `P${best}` : "—"} />
-      <Stat label="Avg Fin" value={avg != null ? avg.toFixed(1) : "—"} />
-      <Stat label="Points" value={pts} />
-    </div>
+    <Framed caption="Career record at this circuit">
+      <div className="grid grid-cols-3 grid-rows-2 gap-1.5 h-full">
+        <Stat label="Starts" value={starts} />
+        <Stat label="Wins" value={wins} accent={accent} />
+        <Stat label="Podiums" value={podiums} accent={accent} />
+        <Stat label="Best" value={best != null ? `P${best}` : "—"} />
+        <Stat label="Avg Fin" value={avg != null ? avg.toFixed(1) : "—"} />
+        <Stat label="Points" value={pts} />
+      </div>
+    </Framed>
   );
 }
 
@@ -244,15 +246,17 @@ function CircuitTrend({ history, accent }) {
     .map((h) => ({ season: n(h.season), pos: n(h.finish_position) }));
   if (rows.length < 2) return <CircuitSummaryList history={history} />;
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
-        <XAxis dataKey="season" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <YAxis reversed domain={[1, "dataMax"]} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`P${v}`, "Finish"]} />
-        <Line type="monotone" dataKey="pos" stroke={accent} strokeWidth={2.5} dot={{ r: 3, fill: accent }} isAnimationActive={false} />
-      </LineChart>
-    </ResponsiveContainer>
+    <Framed caption="Finish position by season (P1 = top)">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
+          <XAxis dataKey="season" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <YAxis reversed domain={[1, "dataMax"]} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => [`P${v}`, "Finish"]} />
+          <Line type="monotone" dataKey="pos" stroke={accent} strokeWidth={2.5} dot={{ r: 3, fill: accent }} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </Framed>
   );
 }
 
@@ -275,15 +279,17 @@ function SeasonPoints({ perf, accent }) {
     .map((r) => ({ round: n(r.round), pts: n(r.cumulative_points) }));
   if (!rows.length) return <Empty text="No standings data for this season." />;
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
-        <XAxis dataKey="round" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <YAxis stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`${v} pts`, "Total"]} labelFormatter={(l) => `Round ${l}`} />
-        <Line type="monotone" dataKey="pts" stroke={accent} strokeWidth={2.5} dot={false} isAnimationActive={false} />
-      </LineChart>
-    </ResponsiveContainer>
+    <Framed caption="Cumulative points by round">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
+          <XAxis dataKey="round" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <YAxis stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => [`${v} pts`, "Total"]} labelFormatter={(l) => `Round ${l}`} />
+          <Line type="monotone" dataKey="pts" stroke={accent} strokeWidth={2.5} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </Framed>
   );
 }
 
@@ -292,21 +298,24 @@ function SeasonPositions({ perf, accent }) {
     .map((r) => ({ round: n(r.round), pos: n(r.finish_position) }));
   if (!rows.length) return <Empty text="No race results for this season." />;
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
-        <XAxis dataKey="round" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <YAxis reversed domain={[1, "dataMax"]} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`P${v}`, "Finish"]} labelFormatter={(l) => `Round ${l}`} />
-        <Line type="monotone" dataKey="pos" stroke={accent} strokeWidth={2.5} dot={{ r: 2.5, fill: accent }} isAnimationActive={false} />
-      </LineChart>
-    </ResponsiveContainer>
+    <Framed caption="Finish position by round (P1 = top)">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
+          <XAxis dataKey="round" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <YAxis reversed domain={[1, "dataMax"]} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => [`P${v}`, "Finish"]} labelFormatter={(l) => `Round ${l}`} />
+          <Line type="monotone" dataKey="pos" stroke={accent} strokeWidth={2.5} dot={{ r: 2.5, fill: accent }} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </Framed>
   );
 }
 
 function SeasonResults({ perf }) {
   if (!perf.length) return <Empty text="No results." />;
   return (
+    <Framed caption="Round-by-round results">
     <div className="h-full overflow-hidden text-[10px] leading-tight">
       {perf.map((r, i) => (
         <div key={i} className="flex items-center gap-2 py-[3px] border-b border-[#1b2431]">
@@ -319,6 +328,7 @@ function SeasonResults({ perf }) {
         </div>
       ))}
     </div>
+    </Framed>
   );
 }
 
@@ -328,15 +338,17 @@ function TitlePositionChart({ history, accent }) {
     .map((h) => ({ season: n(h.season), pos: n(h.championship_position) }));
   if (rows.length < 2) return <Empty text="Not enough seasons for a trajectory." />;
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
-        <XAxis dataKey="season" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <YAxis reversed domain={[1, "dataMax"]} allowDecimals={false} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`P${v}`, "Championship"]} />
-        <Line type="monotone" dataKey="pos" stroke={accent} strokeWidth={2.5} dot={{ r: 3, fill: accent }} isAnimationActive={false} />
-      </LineChart>
-    </ResponsiveContainer>
+    <Framed caption="Championship position by season (P1 = top)">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
+          <XAxis dataKey="season" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <YAxis reversed domain={[1, "dataMax"]} allowDecimals={false} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => [`P${v}`, "Championship"]} />
+          <Line type="monotone" dataKey="pos" stroke={accent} strokeWidth={2.5} dot={{ r: 3, fill: accent }} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </Framed>
   );
 }
 
@@ -344,15 +356,17 @@ function PointsPerSeason({ history, accent }) {
   const rows = history.map((h) => ({ season: n(h.season), pts: n(h.points) }));
   if (!rows.length) return <Empty text="No data." />;
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
-        <XAxis dataKey="season" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <YAxis stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`${v} pts`, "Season"]} cursor={{ fill: "#ffffff08" }} />
-        <Bar dataKey="pts" fill={accent} radius={[2, 2, 0, 0]} isAnimationActive={false} />
-      </BarChart>
-    </ResponsiveContainer>
+    <Framed caption="Points scored by season">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
+          <XAxis dataKey="season" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <YAxis stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => [`${v} pts`, "Season"]} cursor={{ fill: "#ffffff08" }} />
+          <Bar dataKey="pts" fill={accent} radius={[2, 2, 0, 0]} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
+    </Framed>
   );
 }
 
@@ -361,15 +375,17 @@ function WinsPerSeason({ history, accent }) {
   const total = rows.reduce((s, r) => s + r.wins, 0);
   if (!total) return <Empty text="No race wins recorded." />;
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
-        <XAxis dataKey="season" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <YAxis allowDecimals={false} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`${v} wins`, "Season"]} cursor={{ fill: "#ffffff08" }} />
-        <Bar dataKey="wins" fill={accent} radius={[2, 2, 0, 0]} isAnimationActive={false} />
-      </BarChart>
-    </ResponsiveContainer>
+    <Framed caption="Race wins by season">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
+          <XAxis dataKey="season" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <YAxis allowDecimals={false} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => [`${v} wins`, "Season"]} cursor={{ fill: "#ffffff08" }} />
+          <Bar dataKey="wins" fill={accent} radius={[2, 2, 0, 0]} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
+    </Framed>
   );
 }
 
@@ -380,14 +396,16 @@ function BestCircuits({ data, accent }) {
   }));
   if (!rows.length) return <Empty text="No circuit data." />;
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={rows} layout="vertical" margin={{ top: 2, right: 20, left: 4, bottom: 2 }}>
-        <XAxis type="number" domain={[1, "dataMax"]} hide />
-        <YAxis type="category" dataKey="name" width={70} stroke="#5b6675" tick={{ fill: "#9aa4b2", fontSize: 8 }} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`P${v} avg`, "Finish"]} cursor={{ fill: "#ffffff08" }} />
-        <Bar dataKey="avg" fill={accent} radius={[0, 3, 3, 0]} isAnimationActive={false} label={{ position: "right", fill: "#9aa4b2", fontSize: 9 }} />
-      </BarChart>
-    </ResponsiveContainer>
+    <Framed caption="Best circuits — avg finish (lower = better)">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={rows} layout="vertical" margin={{ top: 2, right: 20, left: 4, bottom: 2 }}>
+          <XAxis type="number" domain={[1, "dataMax"]} hide />
+          <YAxis type="category" dataKey="name" width={70} stroke="#5b6675" tick={{ fill: "#9aa4b2", fontSize: 8 }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => [`P${v} avg`, "Finish"]} cursor={{ fill: "#ffffff08" }} />
+          <Bar dataKey="avg" fill={accent} radius={[0, 3, 3, 0]} isAnimationActive={false} label={{ position: "right", fill: "#9aa4b2", fontSize: 9 }} />
+        </BarChart>
+      </ResponsiveContainer>
+    </Framed>
   );
 }
 
@@ -395,19 +413,21 @@ function FinishDistribution({ data, accent }) {
   const rows = data.map((d) => ({ pos: `P${n(d.position)}`, count: n(d.count), position: n(d.position) }));
   if (!rows.length) return <Empty text="No finishes recorded." />;
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={rows} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
-        <XAxis dataKey="pos" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 8 }} interval={0} />
-        <YAxis allowDecimals={false} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [`${v}×`, "Times"]} cursor={{ fill: "#ffffff08" }} />
-        <Bar dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-          {rows.map((r, i) => (
-            <Cell key={i} fill={r.position <= 3 ? accent : "#3a4658"} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <Framed caption="Finish-position distribution (podiums highlighted)">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={rows} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1b2431" />
+          <XAxis dataKey="pos" stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 8 }} interval={0} />
+          <YAxis allowDecimals={false} stroke="#5b6675" tick={{ fill: "#7d8899", fontSize: 9 }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => [`${v}×`, "Times"]} cursor={{ fill: "#ffffff08" }} />
+          <Bar dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+            {rows.map((r, i) => (
+              <Cell key={i} fill={r.position <= 3 ? accent : "#3a4658"} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </Framed>
   );
 }
 
@@ -415,6 +435,18 @@ function Empty({ text }) {
   return (
     <div className="h-full flex items-center justify-center text-center text-[10px] text-gray-600 px-2">
       {text}
+    </div>
+  );
+}
+
+// Wraps a chart with a small heading so each graph says what it shows.
+function Framed({ caption, children }) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1 flex-shrink-0 truncate">
+        {caption}
+      </div>
+      <div className="flex-1 min-h-0">{children}</div>
     </div>
   );
 }
