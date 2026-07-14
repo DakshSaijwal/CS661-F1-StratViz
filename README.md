@@ -41,9 +41,9 @@ Full-screen interactive D3 world map showing race circuit locations as red pins.
 
 Three regions:
 
-1. **Left Panel (Leaderboard)**: Full race classification — position, driver name, team, points, DNF status. Podium finishers (P1-P3) shown with full driver headshot photos and team-colored names. Team logos displayed alongside each entry. Every row is clickable (scaffolded for future driver-detail feature, currently console.log only). Data fetched live via `getRaceLeaderboard()`.
+1. **Left Panel (Leaderboard)**: Full race classification — position, driver name, team, points, DNF status. Podium finishers (P1-P3) shown with full driver headshot photos and team-colored names. Team logos displayed alongside each entry. **Clicking any row opens that driver's full profile in the center pane** (see Driver Profile below). Data fetched live via `getRaceLeaderboard()`.
 
-2. **Center (Race Simulator)**: Canvas-based animated race replay using real telemetry data (2018-2024). Features:
+2. **Center (Race Simulator OR Driver Profile)**: By default shows the canvas-based animated race replay using real telemetry data (2018-2024). When a driver is clicked in the leaderboard, this pane is replaced by the **Driver Profile** (a "← Telemetry" button returns to the simulator). Simulator features:
    - Track outline rendered from circuit geometry with proper rotation
    - All 20 drivers shown as colored dots moving in real-time along the track
    - Play/pause, restart, lap scrubber, and speed control (1x-30x)
@@ -63,6 +63,17 @@ Three regions:
    - **Tire Strategy** — WORKING, `PitStopGantt` Gantt chart with animated playback, driver swap picker, compound-colored bars, evolving tire percentage labels on each stint bar showing share of race completed. Default drivers are top finishers. Percentages persist at end of race until replay.
    - **Lap-by-Lap Position** — WORKING, `PositionChart` animated D3 bump chart with play/pause, 5-driver comparison chips, pit stop markers, compound color bands. Chart height scales dynamically with number of positions. Default drivers are top 5 finishers (sorted by final race position).
    - **Strategic Archetypes** — WORKING, `ParallelCoordinates` parallel coordinates plot of stint strategy (avg lap time, compound, stint length, tire age, grid position) with brush filtering
+
+### Driver Profile (center pane, opened from the leaderboard)
+
+Clicking any driver in the Page 2 leaderboard swaps the center pane for a single-screen (no-scroll) driver profile laid out as a **3×2 grid of six tiles**. Tiles with more than one view expose ‹ › arrow buttons and dot indicators to page between charts. The whole profile is tinted with the driver's **race-weekend** team color (so 2006 Alonso reads as Renault, not his latest team), and a "← Telemetry" button returns to the simulator. Data is loaded in parallel via the `getDriver*` query functions.
+
+1. **Overview** — Large edge-to-edge headshot + team logo, plus a career stat grid: races, wins, podiums, poles, points, championship **titles** (`COUNT(DISTINCT season)` so no duplicate-row inflation), best finish, fastest laps, avg finish, seasons.
+2. **At {Circuit}** — The driver's career record at *this* race's circuit: summary stats + a finish-position trend line across every appearance.
+3. **{Season} Season** — This season's points progression, race-by-race finishing positions, and a results list.
+4. **Career Trajectory** — Championship position per season (line), points per season (bar), and wins per season (bar).
+5. **Circuit Mastery** — Best circuits by average finish (horizontal bar) + a finish-position distribution histogram.
+6. **Driver DNA · 3-D UMAP** — An interactive **precomputed 3-D UMAP** of every driver's career "style fingerprint" (drivers with similar careers cluster together), plus a career-rate radar chart on a second page. Drag to rotate, scroll to zoom, and open **fullscreen** for a larger canvas with live sliders for the two UMAP hyper-parameters (`n_neighbors`, `min_dist`) — the browser switches between 16 precomputed embeddings; no UMAP is ever run client-side.
 
 ---
 
@@ -85,7 +96,7 @@ Three regions:
 │       │   │                        #   files from HuggingFace, registers as SQL views.
 │       │   │                        #   Exports: getConnection(), query(sql), queryArrow(sql),
 │       │   │                        #   registerParquet(), registerHttpParquet(), unregisterFile()
-│       │   └── queries.js           # 21 exported async functions — each runs SQL via
+│       │   └── queries.js           # 28 exported async functions — each runs SQL via
 │       │                            #   DuckDB and returns plain JS array of objects.
 │       │                            #   This is the "API" all components call.
 │       │
@@ -129,6 +140,17 @@ Three regions:
 │       │   │       ├── CompareTooltip.jsx    # Shared tooltip component
 │       │   │       └── comparisonData.js     # Data fetching helpers
 │       │   │
+│       │   ├── profile/            # DRIVER PROFILE (center pane, opened from leaderboard)
+│       │   │   ├── DriverProfile.jsx    # 3×2 grid of 6 tiles (overview, circuit,
+│       │   │   │                        #   season, career, mastery, 3-D UMAP + radar)
+│       │   │   │                        #   Fetches via the getDriver* query functions
+│       │   │   ├── ProfileTile.jsx      # Reusable tile shell: title, accent, paged
+│       │   │   │                        #   views with ‹ › arrows + dot indicators
+│       │   │   └── DriverUmap3D.jsx      # Canvas 3-D UMAP (drag-rotate, scroll-zoom,
+│       │   │                             #   fullscreen w/ n_neighbors + min_dist sliders)
+│       │   │                             #   Reads precomputed /driver_umap_3d.json
+│       │   │
+│       │   ├── TeamLogo.jsx          # Real team logo, or monogram badge fallback
 │       │   ├── FallbackImage.jsx    # <img> with multiple source fallbacks on error
 │       │   │
 │       │   └── layout/              # SHARED UI COMPONENTS
@@ -165,6 +187,9 @@ Three regions:
 │   │                                #   (uses Google datacenter network, ~30-60 min)
 │   ├── upload_telemetry_to_hf.py    # Pushes local telemetry/circuits/track_status parquet
 │   │                                #   to the HuggingFace dataset (run `hf auth login` first)
+│   ├── build_umap.py                # Precomputes the 3-D driver "style fingerprint" UMAP:
+│   │                                #   16 embeddings (n_neighbors × min_dist grid) →
+│   │                                #   frontend/public/driver_umap_3d.json
 │   └── build_parquets.py            # Cleans and exports final .parquet files
 │
 ├── run_pipeline.py                  # Entry point for full pipeline
@@ -183,7 +208,7 @@ User's Browser
     ├── React Pages (LandingPage, RacePage)
     │       │
     │       ▼
-    ├── queries.js  ← "API layer" — 18 async functions returning JS arrays
+    ├── queries.js  ← "API layer" — 28 async functions returning JS arrays
     │       │
     │       ▼
     ├── duckdb.js   ← DuckDB-WASM (full SQL engine running in browser)
@@ -200,7 +225,7 @@ No server. No API calls to a backend. SQL runs client-side in WebAssembly.
 
 ## Data Layer API (queries.js)
 
-All functions are async and return plain JS arrays/objects (21 total). Import what you need:
+All functions are async and return plain JS arrays/objects (28 total). Import what you need:
 
 ```js
 import { getChampionshipStandings, getRaceLeaderboard } from '../lib/queries';
@@ -233,6 +258,13 @@ const leaderboard = await getRaceLeaderboard(2023, 1);
 | `getRaceTelemetry(raceId)` | `"2023_1"` | `{ drivers: [{ code, team, n, t, x, y, throttle, brake, speed }], tEnd, nLaps, lapStartT }` (or null) |
 | `getTrackOutline(raceId)` | `"2023_1"` | `{ x: Float32Array, y: Float32Array, rotation: number }` (or null) |
 | `getComparisonLapData(raceId)` | `"2023_1"` | `[{ driver, team, lap_number, position, compound, lap_time_seconds, gap_to_leader_seconds, tire_age_laps, is_pit_lap }]` — all drivers/laps in one call, for the simulator's comparison panel. `[]` for 2018-2021 races (no `laps` rows), which is the fallback-to-derived-stats signal. |
+| `getRaceCircuit(season, round)` | `2006, 4` | `{ circuit_name, race_name }` |
+| `getDriverCareerStats(driver)` | `"alonso"` | `{ races, wins, podiums, poles, points, fastest_laps, dnfs, avg_finish, avg_grid, best_finish, first_season, last_season, seasons, titles, team }` (single object; `titles` via `COUNT(DISTINCT season)`) |
+| `getDriverCircuitHistory(driver, circuitName)` | `"alonso", "Circuit de..."` | `[{ season, finish_position, grid_position, points, team, status }]` (one row per appearance at that circuit) |
+| `getDriverSeasonPerformance(driver, season)` | `"alonso", 2006` | per-round finishing positions + points for that season |
+| `getDriverSeasonHistory(driver)` | `"alonso"` | per-season summary (championship position, points, wins) for the career-trajectory charts |
+| `getDriverCircuitAverages(driver)` | `"alonso"` | `[{ circuit_name, avg_finish, ... }]` — best circuits by average finish |
+| `getDriverFinishDistribution(driver)` | `"alonso"` | histogram of finishing positions |
 
 ### Key conventions
 - **`season`** — integer, e.g. `2023`
@@ -248,7 +280,6 @@ const leaderboard = await getRaceLeaderboard(2023, 1);
 ## What Needs to Be Built Next
 
 - Fetch the full 2018-2024 telemetry set (`python pipeline/fetch_telemetry.py --out frontend/public`, ~2-4 hrs) and upload it with `python pipeline/upload_telemetry_to_hf.py` — only 2023 Bahrain (`2023_1`) has real telemetry on HuggingFace right now, so every other 2018-2024 race shows "Replay unavailable" until this runs
-- Leaderboard row click → show driver details (future feature)
 - Add more race info to RacePage header (circuit name, date, country)
 - Safety car / VSC overlays on simulator timeline (data already fetched into `track_status.parquet`, just not queried/rendered yet)
 
@@ -336,5 +367,5 @@ Takes ~40 minutes on first run. Subsequent runs use cache and are much faster.
 - **Frontend:** React 18, Vite, Tailwind CSS, D3.js, Recharts, Framer Motion, Zustand
 - **Data:** DuckDB-WASM (SQL in browser), Parquet files on HuggingFace
 - **Map:** D3 + TopoJSON (Natural Earth projection) with pinch-to-zoom and pan
-- **Pipeline:** Python, pandas, FastF1, requests
+- **Pipeline:** Python, pandas, FastF1, requests; scikit-learn + umap-learn for the precomputed 3-D driver UMAP (`driver_umap_3d.json`)
 - **Deployment:** Vercel (auto-deploys from main branch, root directory: `frontend`)
