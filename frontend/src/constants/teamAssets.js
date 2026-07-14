@@ -41,6 +41,11 @@ function normalizeTeam(team) {
   return (team || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+/** True when we ship a real logo image for this constructor. */
+export function hasTeamLogo(team) {
+  return !!TEAM_LOGO_FILES[normalizeTeam(team)];
+}
+
 /**
  * Resolve a constructor name to a logo URL.
  * Falls back to the F1 logo when no team logo exists.
@@ -54,7 +59,7 @@ export function getTeamLogo(team) {
 // Per-team display scale — some logos read small at the shared box size.
 const TEAM_LOGO_SCALE = {
   ferrari: 1.6,
-  redbull: 1.6,
+  redbull: 1.4,
   mclaren: 1.6,
   alfaromeo: 1.3,
   astonmartin: 1.4,
