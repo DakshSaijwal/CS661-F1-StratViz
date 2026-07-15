@@ -10,6 +10,7 @@ import {
 } from "./raceEngine";
 import TelemetryChart from "./TelemetryChart";
 import ComparisonPanel from "./comparison/ComparisonPanel";
+import useViewModeStore from "../../store/viewModeStore";
 
 const TWO_PI = Math.PI * 2;
 
@@ -18,6 +19,7 @@ const TWO_PI = Math.PI * 2;
  * Canvas renders the track + cars from real position telemetry.
  */
 export default function RaceSimulator({ raceId }) {
+  const { isMobileView } = useViewModeStore();
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -322,7 +324,7 @@ export default function RaceSimulator({ raceId }) {
   }
 
   return (
-    <div className="h-full w-full flex gap-3 p-3 min-h-0">
+    <div className={`h-full w-full flex gap-3 p-3 min-h-0 ${isMobileView ? "flex-col" : ""}`}>
       {/* Left: canvas + controls + telemetry chart */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <div
@@ -365,11 +367,11 @@ export default function RaceSimulator({ raceId }) {
 
         {/* Controls */}
         <div className="mt-2 flex flex-col gap-2">
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center ${isMobileView ? "flex-wrap gap-x-3 gap-y-2" : "gap-3"}`}>
             <button
               onClick={togglePlay}
               disabled={loading}
-              className="w-10 h-10 rounded-full bg-[#e10600] hover:bg-[#ff1a0d] text-white flex items-center justify-center cursor-pointer disabled:opacity-40"
+              className="w-10 h-10 rounded-full bg-[#e10600] hover:bg-[#ff1a0d] text-white flex items-center justify-center cursor-pointer disabled:opacity-40 flex-shrink-0"
             >
               {playing ? "❚❚" : ui.atEnd ? "⟲" : "▶"}
             </button>
@@ -377,14 +379,14 @@ export default function RaceSimulator({ raceId }) {
               onClick={restart}
               disabled={loading}
               title="Restart"
-              className="w-9 h-9 rounded-full bg-[#1b2431] border border-[#26303f] text-gray-300 hover:text-white flex items-center justify-center cursor-pointer disabled:opacity-40"
+              className="w-9 h-9 rounded-full bg-[#1b2431] border border-[#26303f] text-gray-300 hover:text-white flex items-center justify-center cursor-pointer disabled:opacity-40 flex-shrink-0"
             >
               ⟲
             </button>
 
             {/* Lap slider */}
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-xs text-gray-400 whitespace-nowrap w-20">
+            <div className="flex items-center gap-2 flex-1 min-w-[140px]">
+              <span className={`text-xs text-gray-400 whitespace-nowrap ${isMobileView ? "w-16" : "w-20"}`}>
                 Lap {ui.lap}/{ui.nLaps}
               </span>
               <input
@@ -399,7 +401,7 @@ export default function RaceSimulator({ raceId }) {
             </div>
 
             {/* Speed slider */}
-            <div className="flex items-center gap-2 w-40">
+            <div className={`flex items-center gap-2 ${isMobileView ? "w-full" : "w-40"}`}>
               <span className="text-xs text-gray-400 whitespace-nowrap w-10">{speed}x</span>
               <input
                 type="range"
@@ -426,7 +428,9 @@ export default function RaceSimulator({ raceId }) {
       </div>
 
       {/* Right: live standings */}
-      <div className="w-56 flex-shrink-0 flex flex-col rounded-xl bg-[#0d1420] border border-[#26303f] overflow-hidden">
+      <div className={`flex-shrink-0 flex flex-col rounded-xl bg-[#0d1420] border border-[#26303f] overflow-hidden ${
+        isMobileView ? "w-full max-h-40" : "w-56"
+      }`}>
         <div className="px-3 py-2 border-b border-[#26303f] flex items-center justify-between">
           <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">
             Live Order

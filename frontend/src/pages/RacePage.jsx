@@ -12,6 +12,7 @@ import FallbackImage from "../components/FallbackImage";
 import { getTeamLogo, getTeamLogoScale, getDriverImageCandidates } from "../constants/teamAssets";
 import { TEAM_COLORS } from "../constants/f1Colors";
 import raceData from "../constants/raceLocations.json";
+import useViewModeStore from "../store/viewModeStore";
 
 const TELEMETRY_MIN_YEAR = 2018;
 const TELEMETRY_MAX_YEAR = 2024;
@@ -24,6 +25,7 @@ const TELEMETRY_MAX_YEAR = 2024;
 export default function RacePage() {
   const { season, raceId } = useParams();
   const navigate = useNavigate();
+  const { isMobileView } = useViewModeStore();
   const seasonNum = Number(season);
 
   // Find race info from static data
@@ -63,19 +65,23 @@ export default function RacePage() {
   }
 
   return (
-    <div className="h-screen bg-[#0a0e14] flex overflow-hidden">
-      {/* LEFT PANEL — Leaderboard */}
-      <aside className="w-[300px] flex-shrink-0 bg-[#121822] border-r border-[#26303f] flex flex-col overflow-y-auto">
+    <div className={`h-screen bg-[#0a0e14] overflow-hidden flex ${isMobileView ? "flex-col" : ""}`}>
+      {/* LEFT PANEL — Leaderboard (stacks above content on mobile, scrollable within its own max-height) */}
+      <aside
+        className={`flex-shrink-0 bg-[#121822] flex flex-col overflow-y-auto border-[#26303f] ${
+          isMobileView ? "w-full max-h-[40vh] border-b" : "w-[300px] border-r"
+        }`}
+      >
         {/* Back button */}
         <button
           onClick={() => navigate("/")}
-          className="text-left text-sm text-gray-400 hover:text-white px-4 py-3 border-b border-[#26303f] cursor-pointer"
+          className="text-left text-sm text-gray-400 hover:text-white px-4 py-3 border-b border-[#26303f] cursor-pointer flex-shrink-0"
         >
           ← Back to map
         </button>
 
         {/* Race title */}
-        <div className="px-4 py-4 border-b border-[#26303f]">
+        <div className="px-4 py-4 border-b border-[#26303f] flex-shrink-0">
           <h2 className="text-lg font-bold text-white">{raceInfo.race_name}</h2>
           <p className="text-xs text-gray-500">Season {season} · Round {raceInfo.round}</p>
         </div>
@@ -96,7 +102,9 @@ export default function RacePage() {
                 <div
                   key={i}
                   onClick={() => setSelectedDriver(entry)}
-                  className={`flex items-center gap-3 px-3 py-4 rounded-lg cursor-pointer transition-colors ${
+                  className={`flex items-center gap-3 px-3 rounded-lg cursor-pointer transition-colors ${
+                    isMobileView ? "py-2" : "py-4"
+                  } ${
                     selectedDriver?.driver === entry.driver ? "bg-[#1b2431] ring-1 ring-[#e10600]/50" : "hover:bg-[#1b2431]"
                   }`}
                 >
@@ -107,9 +115,13 @@ export default function RacePage() {
                   <FallbackImage
                     sources={getDriverImageCandidates(entry.driver)}
                     alt={formatDriverName(entry.driver)}
-                    className="h-36 w-auto max-w-[120px] object-contain object-top flex-shrink-0"
+                    className={`w-auto object-contain object-top flex-shrink-0 ${
+                      isMobileView ? "h-20 max-w-[80px]" : "h-36 max-w-[120px]"
+                    }`}
                     fallback={
-                      <div className="h-36 w-[90px] flex items-center justify-center text-gray-600 text-3xl flex-shrink-0">
+                      <div className={`flex items-center justify-center text-gray-600 text-3xl flex-shrink-0 ${
+                        isMobileView ? "h-20 w-[60px]" : "h-36 w-[90px]"
+                      }`}>
                         {formatDriverName(entry.driver).charAt(0)}
                       </div>
                     }
@@ -172,10 +184,10 @@ export default function RacePage() {
       </aside>
 
       {/* MAIN CONTENT */}
-      <div className="flex-1 flex flex-col overflow-y-auto">
+      <div className={`flex-1 flex flex-col overflow-y-auto ${isMobileView ? "min-h-0" : ""}`}>
         {/* CENTER — Driver profile (when a driver is picked) else the
             Race Simulator (2018-2024) / static track (older seasons) */}
-        <div className="flex-1 min-h-[400px]">
+        <div className={`flex-1 ${isMobileView ? "min-h-[400px]" : ""}`}>
           {selectedDriver ? (
             <DriverProfile
               entry={selectedDriver}
@@ -194,7 +206,7 @@ export default function RacePage() {
         {/* BOTTOM — Toggle buttons + panel */}
         <div className="border-t border-[#26303f]">
           {/* Toggle buttons */}
-          <div className="flex gap-2 px-6 py-3 bg-[#121822]">
+          <div className={`flex gap-2 py-3 bg-[#121822] ${isMobileView ? "flex-wrap px-3" : "px-6"}`}>
             {[
               { id: "tire", label: "Tire Strategy" },
               { id: "position", label: "Lap-by-Lap Position" },
@@ -203,7 +215,9 @@ export default function RacePage() {
               <button
                 key={id}
                 onClick={() => handleToggle(id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer ${
+                className={`rounded-lg font-medium border transition-all cursor-pointer ${
+                  isMobileView ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"
+                } ${
                   activeToggle === id
                     ? "border-[#e10600] text-[#e10600] bg-[#e10600]/10"
                     : "border-[#26303f] text-gray-400 hover:text-white hover:border-gray-500"
@@ -216,7 +230,7 @@ export default function RacePage() {
 
           {/* Toggle panel content */}
           {activeToggle && (
-            <div className="px-6 py-4 bg-[#0a0e14]">
+            <div className={`bg-[#0a0e14] ${isMobileView ? "px-3 py-3 max-h-[70vh] overflow-y-auto" : "px-6 py-4"}`}>
               {activeToggle === "tire" && (
                 <PitStopGantt raceId={raceId} />
               )}

@@ -5,6 +5,7 @@ import { shortCode } from "./CompareTooltip";
 import PaceChart from "./PaceChart";
 import DynamicsCharts from "./DynamicsCharts";
 import MetricScatter from "./MetricScatter";
+import useViewModeStore from "../../../store/viewModeStore";
 
 const TABS = [
   { key: "pace", label: "Pace" },
@@ -21,6 +22,7 @@ const MAX_SCATTER_SLOTS = 3;
  * simulation progresses.
  */
 export default function ComparisonPanel({ race, lapsRows, compare, currentLap, nLaps, onRemoveDriver, onClear }) {
+  const { isMobileView } = useViewModeStore();
   const [expanded, setExpanded] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [tab, setTab] = useState("pace");
@@ -70,6 +72,7 @@ export default function ComparisonPanel({ race, lapsRows, compare, currentLap, n
       onMouseEnter={enter}
       onMouseLeave={leave}
       onFocus={enter}
+      onClick={() => { if (isMobileView && !open) setExpanded(true); }}
     >
       {!open ? (
         <div className="flex items-center gap-2 px-3 py-2">
@@ -154,6 +157,15 @@ export default function ComparisonPanel({ race, lapsRows, compare, currentLap, n
               >
                 ✕
               </button>
+              {isMobileView && !pinned && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); clearTimeout(collapseTimer.current); setExpanded(false); }}
+                  title="Collapse"
+                  className="px-1.5 py-0.5 rounded text-xs text-gray-400 hover:text-white cursor-pointer"
+                >
+                  ▾
+                </button>
+              )}
             </span>
           </div>
 
