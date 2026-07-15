@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getTeamColor } from "../constants/f1Colors";
+import useViewModeStore from "../store/viewModeStore";
 
 /**
  * SlotDriverPicker
@@ -7,6 +8,7 @@ import { getTeamColor } from "../constants/f1Colors";
  * Opens when you click a driver's name in PositionChart or PitStopGantt.
  */
 export default function SlotDriverPicker({ picker, allDrivers, slots, driverMeta, onPick, onClose }) {
+  const { isMobileView } = useViewModeStore();
   const rootRef = useRef(null);
   const [entered, setEntered] = useState(false);
 
@@ -33,7 +35,9 @@ export default function SlotDriverPicker({ picker, allDrivers, slots, driverMeta
   return (
     <div
       ref={rootRef}
-      className={`absolute z-30 w-56 max-h-72 overflow-auto rounded-lg border border-white/15 bg-[#0d0d0d]/95 backdrop-blur-sm shadow-2xl shadow-black/60 py-1 transition-all duration-150 ease-out ${
+      className={`absolute z-30 max-h-72 overflow-auto rounded-lg border border-white/15 bg-[#0d0d0d]/95 backdrop-blur-sm shadow-2xl shadow-black/60 py-1 transition-all duration-150 ease-out ${
+        isMobileView ? "w-48 max-w-[85vw]" : "w-56"
+      } ${
         entered ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1"
       }`}
       style={{ left: picker.x + 10, top: Math.max(4, picker.y - 8) }}

@@ -3,6 +3,7 @@ import * as d3 from "d3";
 import { COMPOUND_COLORS } from "../../constants/f1Colors";
 import { getStintStrategyData } from "../../lib/queries";
 import LoadingSkeleton from "../layout/LoadingSkeleton";
+import useViewModeStore from "../../store/viewModeStore";
 
 const PREFERRED_DIMENSIONS = [
   "avg_lap_time",
@@ -19,9 +20,12 @@ const PREFERRED_DIMENSIONS = [
  * Props: { raceId: string }
  */
 export default function ParallelCoordinates({ raceId }) {
+  const { isMobileView } = useViewModeStore();
   const svgRef = useRef(null);
+  const wrapRef = useRef(null);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [chartWidth, setChartWidth] = useState(900);
 
   // Fetch data
   useEffect(() => {
@@ -32,13 +36,27 @@ export default function ParallelCoordinates({ raceId }) {
     });
   }, [raceId]);
 
+  // Mobile view only: track container width so the chart adapts (keeps axis
+  // labels legible instead of shrinking the whole SVG). Desktop keeps the
+  // original fixed 900px chart.
+  useEffect(() => {
+    if (!isMobileView) { setChartWidth(900); return; }
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => setChartWidth(Math.max(320, el.clientWidth - 32));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isMobileView]);
+
   // Render chart
   useEffect(() => {
     if (!data.length || !svgRef.current) return;
     d3.select(svgRef.current).selectAll("*").remove();
 
     const margin = { top: 40, right: 10, bottom: 20, left: 10 };
-    const width = 900 - margin.left - margin.right;
+    const width = chartWidth - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
 
     const svg = d3
@@ -134,13 +152,13 @@ export default function ParallelCoordinates({ raceId }) {
           d3.brushY().extent([[-10, 0], [10, height]]).on("brush end", (e) => brushed(e, d))
         );
       });
-  }, [data]);
+  }, [data, chartWidth]);
 
   if (loading) return <LoadingSkeleton height="450px" />;
   if (!data.length) return <div className="text-gray-500 text-sm text-center py-8">No stint strategy data available</div>;
 
   return (
-    <div className="w-full bg-[#0a0a0a] p-4 rounded-xl border border-gray-800">
+    <div ref={wrapRef} className="w-full bg-[#0a0a0a] p-4 rounded-xl border border-gray-800">
       <h2 className="text-white text-lg font-semibold mb-4">Strategic Archetypes</h2>
       <svg ref={svgRef} className="mx-auto block max-w-full"></svg>
       <p className="text-[10px] text-gray-500 mt-2">

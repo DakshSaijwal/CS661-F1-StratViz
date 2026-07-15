@@ -4,6 +4,7 @@ import { getTeamColor, COMPOUND_COLORS } from "../../constants/f1Colors";
 import { getPitStopGanttData, getPositionChartData } from "../../lib/queries";
 import SlotDriverPicker from "../SlotDriverPicker";
 import LoadingSkeleton from "../layout/LoadingSkeleton";
+import useViewModeStore from "../../store/viewModeStore";
 
 const SLOT_COUNT = 5;
 
@@ -18,7 +19,7 @@ function tireColor(compound) {
  * Props: { raceId: string }
  */
 export default function PitStopGantt({ raceId }) {
-  const width = 900;
+  const { isMobileView } = useViewModeStore();
   const rowHeight = 34;
   const margin = { top: 24, right: 24, bottom: 40, left: 100 };
 
@@ -31,8 +32,23 @@ export default function PitStopGantt({ raceId }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [slots, setSlots] = useState([]);
   const [picker, setPicker] = useState(null);
+  const [width, setWidth] = useState(900);
   const containerRef = useRef(null);
   const intervalRef = useRef(null);
+
+  // Mobile view only: track container width so the chart adapts (keeps text
+  // at a legible fixed pixel size instead of visually shrinking the whole SVG).
+  // Desktop keeps the original fixed 900px chart.
+  useEffect(() => {
+    if (!isMobileView) { setWidth(900); return; }
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setWidth(Math.max(320, el.clientWidth - 32));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isMobileView]);
 
   // Fetch data
   useEffect(() => {

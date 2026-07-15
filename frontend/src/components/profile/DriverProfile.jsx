@@ -10,6 +10,7 @@ import ProfileTile from "./ProfileTile";
 import DriverUmap3D from "./DriverUmap3D";
 import { getDriverImageCandidates } from "../../constants/teamAssets";
 import { TEAM_COLORS } from "../../constants/f1Colors";
+import useViewModeStore from "../../store/viewModeStore";
 import {
   getRaceCircuit, getDriverCareerStats, getDriverCircuitHistory,
   getDriverSeasonPerformance, getDriverSeasonHistory,
@@ -52,6 +53,7 @@ const tooltipStyle = {
 };
 
 export default function DriverProfile({ entry, season, round, raceName, onBack }) {
+  const { isMobileView } = useViewModeStore();
   const driver = entry.driver;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -119,14 +121,16 @@ export default function DriverProfile({ entry, season, round, raceName, onBack }
   return (
     <div className="h-full flex flex-col bg-[#0a0e14]">
       {header}
-      <div className="flex-1 min-h-0 grid grid-cols-3 grid-rows-2 gap-2 p-2">
+      <div className={`flex-1 min-h-0 grid gap-2 p-2 ${
+        isMobileView ? "grid-cols-1 auto-rows-[360px] overflow-y-auto" : "grid-cols-3 grid-rows-2"
+      }`}>
 
         {/* SECTION 1 — Overview: large photo + career stats */}
         <ProfileTile title="Overview" accent={teamColor}
           pages={[
             <div key="ov" className="flex gap-3 h-full">
               {/* Photo column — fills the tile height (~2.5x previous) */}
-              <div className="flex-shrink-0 w-[150px] flex flex-col items-center min-h-0">
+              <div className={`flex-shrink-0 flex flex-col items-center min-h-0 ${isMobileView ? "w-[110px]" : "w-[150px]"}`}>
                 <FallbackImage
                   sources={getDriverImageCandidates(driver)}
                   alt={formatName(driver)}
